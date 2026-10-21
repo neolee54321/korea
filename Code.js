@@ -10,7 +10,7 @@ const NIGHT = Object.freeze({
   input:'신규20_입력대기', queue:'야간분석_작업대기열',
   control:'야간분석_실행관리', errors:'야간분석_오류기록',
   result:'신규20_시험결과', agent:'관리사배분_결과',
-  tickFn:'nightTick', tickMinutes:5, maxPerTick:5,
+  tickFn:'nightTick', tickMinutes:5, maxPerTick:15,
   maxRuntimeMs:220000, maxRetries:3, reportYear:2025
 });
 const H = {
