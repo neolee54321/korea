@@ -97,3 +97,13 @@ function nightAmount_(v){if(v===null||v===undefined||String(v).trim()==='-'||Str
 /** 설치 후 확인용. 인증정보 자체는 표시하지 않습니다. */
 function nightStatus(){return {dartKeyRegistered:!!nightKey_(),active:PropertiesService.getScriptProperties().getProperty('NIGHT_ACTIVE')==='1',run:PropertiesService.getScriptProperties().getProperty('NIGHT_RUN')||'',tickTriggers:ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===NIGHT.tickFn).length};}
 
+
+/** DART ZIP response diagnostic; never prints API key or response body. */
+function nightDartDiagnostic(){
+  nightValidate_();
+  const url='https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key='+encodeURIComponent(nightKey_().trim());
+  const r=UrlFetchApp.fetch(url,{muteHttpExceptions:true});
+  const bytes=r.getBlob().getBytes();
+  const zip=bytes.length>3&&bytes[0]===80&&bytes[1]===75;
+  console.log(JSON.stringify({http:r.getResponseCode(),zip:zip,bytes:bytes.length,contentType:r.getHeaders()['Content-Type']||'unknown'}));
+}
