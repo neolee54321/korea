@@ -126,11 +126,17 @@ function nightDartDiagnostic(){
 function nightCorpTest(){
   const started=Date.now();
   const names=['티케이지휴켐스(주)','(주)에이블씨엔씨','한전산업개발(주)'];
+  let status='성공', detail='';
   try{
     const index=nightCorpIndex_();
     const result=names.map(name=>({name:name,exactMatches:(index[name]||[]).length,normalizedMatches:nightCorp_(name).length}));
-    console.log(JSON.stringify({ok:true,elapsedSeconds:Math.round((Date.now()-started)/1000),sample:result}));
+    detail=JSON.stringify(result);
   }catch(e){
-    console.log(JSON.stringify({ok:false,elapsedSeconds:Math.round((Date.now()-started)/1000),error:String(e.message||e).slice(0,250)}));
+    status='오류';
+    detail=String(e.message||e).slice(0,400);
   }
+  const seconds=Math.round((Date.now()-started)/1000);
+  const log=nightSheet_('야간분석_진단기록',['실행시각','진단함수','결과','소요초','검사내용']);
+  log.appendRow([nightNow_(),'nightCorpTest',status,seconds,detail]);
+  console.log(JSON.stringify({status:status,elapsedSeconds:seconds,detail:detail}));
 }
