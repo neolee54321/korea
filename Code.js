@@ -135,6 +135,7 @@ function nightWatchdog(){
   const q=nightSheet_(NIGHT.queue,H.queue);
   const rows=q.getLastRow()>1?q.getRange(2,1,q.getLastRow()-1,16).getValues().filter(r=>r[0]===id):[];
   const pending=rows.some(r=>['대기','재시도','진행중'].includes(r[8]));
+  if(p.getProperty('NIGHT_ACTIVE')!=='1'){nightHealthWrite_('수동중지','nightResume 실행 전 자동재개 금지');return;}
   if(!pending){nightHealthWrite_('작업종료','남은 작업 없음');return;}
   const ticks=ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===NIGHT.tickFn);
   if(!ticks.length){nightInstallTick_();nightHealthWrite_('트리거복구','처리 트리거 재설치');}
@@ -158,6 +159,25 @@ function nightWatchdog(){
  }
 }
 /** 기존 시험 실행에서 기업명 중복으로 보류된 항목만 재검증. 기존 결과행 유지. */
+/** 비공시 기업으로 확인된 기존 보류 행만 재분석 예약. 결과 행 덮어쓰기, 새 행 중복 추가 방지. */
+function nightRecheckNonDart(){
+ return nightLock_(()=>{
+  const p=PropertiesService.getScriptProperties(),id=p.getProperty('NIGHT_RUN');
+  if(!id)throw Error('기존 실행ID 없음');
+  if(p.getProperty('NIGHT_ACTIVE')==='1')throw Error('먼저 nightStop으로 분석을 중지하세요.');
+  const q=nightSheet_(NIGHT.queue,H.queue),out=nightSheet_(NIGHT.result,H.result);
+  const rows=q.getLastRow()>1?q.getRange(2,1,q.getLastRow()-1,16).getValues():[];
+  let count=0;
+  for(let i=0;i<rows.length;i++){
+   const r=rows[i],outRow=Number(r[14]);
+   if(r[0]!==id||r[8]!=='보류'||!Number.isInteger(outRow)||outRow<2||outRow>out.getLastRow())continue;
+   if(String(out.getRange(outRow,12).getDisplayValue())!=='DART 기업명 일치 항목 없음')continue;
+   q.getRange(i+2,8,1,5).setValues([['대기','재시도',0,'','']]);
+   count++;
+  }
+  return 'DART 미등록 기존 보류 '+count+'건 재분석 예약. nightResume으로 재개하세요.';
+ });
+}
 function nightRetryAmbiguous(){
  return nightLock_(()=>{
   const p=PropertiesService.getScriptProperties(),id=p.getProperty('NIGHT_RUN');
@@ -189,7 +209,7 @@ function nightClearTick_(){ScriptApp.getProjectTriggers().filter(t=>t.getHandler
 function nightTick(){if(PropertiesService.getScriptProperties().getProperty('NIGHT_ACTIVE')!=='1')return;PropertiesService.getScriptProperties().setProperty('NIGHT_TICK_STARTED',String(Date.now()));nightLock_(()=>{const start=Date.now(),id=PropertiesService.getScriptProperties().getProperty('NIGHT_RUN');const q=nightSheet_(NIGHT.queue,H.queue);const n=q.getLastRow();if(n<2){PropertiesService.getScriptProperties().setProperty('NIGHT_ACTIVE','0');nightClearTick_();return;}const rows=q.getRange(2,1,n-1,16).getValues();let done=0;for(let i=0;i<rows.length&&done<NIGHT.maxPerTick&&Date.now()-start<NIGHT.maxRuntimeMs;i++){const r=rows[i];if(r[0]!==id||!['대기','재시도'].includes(r[8]))continue;if(r[10]&&new Date(r[10]).getTime()>Date.now())continue;const row=i+2;done++;try{q.getRange(row,8,1,2).setValues([['DART 분석','진행중']]);const outcome=nightAnalyze_(r);const result=nightSheet_(NIGHT.result,H.result);const oldResultRow=Number(r[14]);const reuse=Number.isInteger(oldResultRow)&&oldResultRow>=2&&oldResultRow<=result.getLastRow();if(reuse)result.getRange(oldResultRow,1,1,H.result.length).setValues([outcome.result]);else result.appendRow(outcome.result);const resultRow=reuse?oldResultRow:result.getLastRow();const agent=nightSheet_(NIGHT.agent,H.agent);const agentValues=agent.getLastRow()>1?agent.getRange(2,1,agent.getLastRow()-1,4).getDisplayValues():[];const agentIndex=reuse?agentValues.findIndex(a=>a[0]===String(id)&&String(a[3]).replace(/\D/g,'')===String(r[3]).replace(/\D/g,'')):-1;const agentRow=[id,'',r[2],r[3],r[4],r[5],r[6],outcome.signal,outcome.level,outcome.evidence,'검토대기','배정대기','재무징후는 실제 미수채권 보유의 증거가 아님'];if(agentIndex>=0)agent.getRange(agentIndex+2,1,1,H.agent.length).setValues([agentRow]);else agent.appendRow(agentRow);q.getRange(row,8,1,8).setValues([['완료',outcome.status,Number(r[9])+1,'','',outcome.corpCode,nightNow_(),resultRow]]);}catch(e){const tries=Number(r[9])+1;const retry=tries<NIGHT.maxRetries;const delay=Math.min(60,Math.pow(2,tries)*5);const next=retry?new Date(Date.now()+delay*60000):'';q.getRange(row,8,1,5).setValues([['DART 분석',retry?'재시도':'실패',tries,next,String(e.message||e).slice(0,500)]]);nightSheet_(NIGHT.errors,['실행ID','기업명','사업자등록번호','단계','오류유형','오류내용','발생시각','재시도결과','최종처리']).appendRow([id,r[2],r[3],'DART',retry?'재시도':'최종실패',String(e.message||e),nightNow_(),retry?'예정':'없음',retry?'대기':'실패']);}}
 nightUpdateControl_(id);});}
 function nightUpdateControl_(id){const q=nightSheet_(NIGHT.queue,H.queue);const values=q.getLastRow()>1?q.getRange(2,1,q.getLastRow()-1,16).getValues().filter(r=>r[0]===id):[];const count=s=>values.filter(r=>r[8]===s).length;const completed=count('완료'),partial=count('부분완료'),failed=count('실패'),held=count('보류');const waiting=values.length-completed-partial-failed-held;const ctl=nightSheet_(NIGHT.control,H.control);const c=ctl.getDataRange().getValues();for(let i=1;i<c.length;i++)if(c[i][0]===id){ctl.getRange(i+1,4,1,9).setValues([[nightNow_(),values.length,completed,partial,held,failed,waiting?'진행중':'완료',waiting?'약 5분 간격으로 재개':'',waiting?'API 할당량/오류에 따라 처리 시간 변동':'완료: 결과 검토 필요']]);break;}if(!waiting){PropertiesService.getScriptProperties().setProperty('NIGHT_ACTIVE','0');nightClearTick_();}}
-function nightAnalyze_(r){const name=String(r[2]).trim();const reg=String(r[3]||'').replace(/\D/g,'');const phone=String(r[4]||'');const address=String(r[5]||'');const found=nightCorp_(name);const date=nightDate_(nightNow_());if(found.length>1){const verifiedMatches=[];for(const candidate of found.slice(0,12)){const check=nightVerifyCorp_(candidate.code,reg);if(check.ok)verifiedMatches.push(candidate);}if(verifiedMatches.length===1){found.splice(0,found.length,verifiedMatches[0]);}else if(verifiedMatches.length>1){found.splice(0,found.length,...verifiedMatches);}}if(found.length!==1){const reason=found.length?'동명 또는 유사 기업 복수: DART 고유번호 수동 확인 필요':'DART 기업명 일치 항목 없음';return {corpCode:'',status:'보류',signal:'미검증',level:'보류',evidence:reason,result:[name,reg,phone,address,'','사업자번호 국세청 미검증','','','', '보류','재무 분석 불가',reason,date+' / DART 기업개황']};}
+function nightAnalyze_(r){const name=String(r[2]).trim();const reg=String(r[3]||'').replace(/\D/g,'');const phone=String(r[4]||'');const address=String(r[5]||'');const found=nightCorp_(name);const date=nightDate_(nightNow_());if(found.length>1){const verifiedMatches=[];for(const candidate of found.slice(0,12)){const check=nightVerifyCorp_(candidate.code,reg);if(check.ok)verifiedMatches.push(candidate);}if(verifiedMatches.length===1){found.splice(0,found.length,verifiedMatches[0]);}else if(verifiedMatches.length>1){found.splice(0,found.length,...verifiedMatches);}}if(found.length!==1){const reason=found.length?'동명 또는 유사 기업 복수: DART 고유번호 수동 확인 필요':'DART 기업명 일치 항목 없음';if(!found.length){const signal='공시재무 없음 / 업종 기반 거래구조 검토';const evidence='비즈라인 제공 기업명·사업자번호·주소·업종 / DART 일치 기업 없음 / 국세청 상태 미검증';return {corpCode:'',status:'부분완료',signal,level:'비공시·기초정보',evidence,result:[name,reg,phone,address,'','비즈라인 원본 사업자번호 기재 / 국세청 미검증','','','공시재무 및 연체·충당금 확인 불가','부분완료','공시재무 미확인: 업종별 거래구조·외상거래 가능성은 담당자 확인 필요','DART 기업명 일치 항목 없음 (기업 부존재를 뜻하지 않음)',date+' / '+evidence]};}return {corpCode:'',status:'보류',signal:'미검증',level:'보류',evidence:reason,result:[name,reg,phone,address,'','사업자번호 국세청 미검증','','','', '보류','재무 분석 불가',reason,date+' / DART 기업개황']};}
 const corp=found[0];
 const verified=nightVerifyCorp_(corp.code,reg);
 if(!verified.ok){
