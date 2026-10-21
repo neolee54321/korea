@@ -136,6 +136,32 @@ function nightWatchdog(){
   console.error('nightWatchdog: '+String(e.stack||e));
  }
 }
+/** 기존 시험 실행에서 기업명 중복으로 보류된 항목만 재검증. 기존 결과행 유지. */
+function nightRetryAmbiguous(){
+ return nightLock_(()=>{
+  const p=PropertiesService.getScriptProperties(),id=p.getProperty('NIGHT_RUN');
+  if(!id)throw Error('기존 실행ID 없음');
+  if(p.getProperty('NIGHT_ACTIVE')==='1')throw Error('현재 분석 진행 중');
+  const q=nightSheet_(NIGHT.queue,H.queue),out=nightSheet_(NIGHT.result,H.result);
+  const rows=q.getLastRow()>1?q.getRange(2,1,q.getLastRow()-1,16).getValues():[];
+  let count=0;
+  for(let i=0;i<rows.length;i++){
+   const r=rows[i],resultRow=Number(r[14]);
+   if(r[0]!==id||r[8]!=='보류'||!Number.isInteger(resultRow)||resultRow<2||resultRow>out.getLastRow())continue;
+   const reason=String(out.getRange(resultRow,12).getDisplayValue());
+   if(reason!=='동명 또는 유사 기업 복수: DART 고유번호 수동 확인 필요')continue;
+   q.getRange(i+2,8,1,5).setValues([['대기','재시도',0,'','']]);
+   count++;
+  }
+  if(count){
+   p.setProperty('NIGHT_ACTIVE','1');
+   nightInstallTick_();
+   nightUpdateControl_(id);
+  }
+  nightSheet_('야간분석_진단기록',['실행시각','진단함수','결과','소요초','검사내용']).appendRow([nightNow_(),'nightRetryAmbiguous','성공',0,'동명 기업 '+count+'건 재검증 예약']);
+  return '동명 기업 '+count+'건 재검증 예약';
+ });
+}
 function nightStop(){nightLock_(()=>{PropertiesService.getScriptProperties().setProperty('NIGHT_ACTIVE','0');nightClearTick_();});}
 function nightClearTick_(){ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===NIGHT.tickFn).forEach(t=>ScriptApp.deleteTrigger(t));}
 /** Google 서버 트리거: 실패 행은 기록하고 다음 회사로 진행합니다. */
