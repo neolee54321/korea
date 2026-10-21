@@ -333,3 +333,100 @@ function nightCorpTest(){
   log.appendRow([nightNow_(),'nightCorpTest',status,seconds,detail]);
   console.log(JSON.stringify({status:status,elapsedSeconds:seconds,detail:detail}));
 }
+
+
+/**
+ * 국세청 사업자등록 상태조회 (공공데이터포털 NTS API).
+ * 대량분석 200건의 원본 사업자번호를 검증합니다. DART 결과는 변경하지 않습니다.
+ * 별도 스크립트 속성 NTS_API_KEY 필요. 인증키를 코드/시트/로그에 기록하지 않습니다.
+ * 실행: nightNtsStart() 1회 -> 자동 트리거 nightNtsTick() (5분마다 100건).
+ */
+const NIGHT_NTS = Object.freeze({
+ sheet:'대량분석_국세청검증', fn:'nightNtsTick', size:100,
+ headers:['실행ID','원본행','기업명','사업자등록번호','조회상태','국세청 사업자상태','과세유형','폐업일자','국세청 상태코드','조회시각','오류·참고']
+});
+function nightNtsKey_(){
+ const p=PropertiesService.getScriptProperties();
+ return String(p.getProperty('NTS_API_KEY')||p.getProperty('NTS_SERVICE_KEY')||'').trim();
+}
+function nightNtsInstall_(){
+ ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===NIGHT_NTS.fn).forEach(t=>ScriptApp.deleteTrigger(t));
+ ScriptApp.newTrigger(NIGHT_NTS.fn).timeBased().everyMinutes(5).create();
+}
+function nightNtsStop(){
+ PropertiesService.getScriptProperties().setProperty('NIGHT_NTS_ACTIVE','0');
+ ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===NIGHT_NTS.fn).forEach(t=>ScriptApp.deleteTrigger(t));
+ return '국세청 상태조회 중지';
+}
+function nightNtsStart(){
+ return nightLock_(()=>{
+  if(!nightNtsKey_())throw Error('이 Apps Script 프로젝트의 스크립트 속성 NTS_API_KEY가 없습니다. 인증키는 채팅이나 코드에 입력하지 마세요.');
+  const p=PropertiesService.getScriptProperties(),run=p.getProperty('NIGHT_RUN');
+  if(!run)throw Error('기존 대량분석 실행ID 없음');
+  if(p.getProperty('NIGHT_NTS_ACTIVE')==='1')return '국세청 조회가 이미 실행 중입니다.';
+  const queue=nightSheet_(NIGHT.queue,H.queue),rows=queue.getLastRow()>1?queue.getRange(2,1,queue.getLastRow()-1,16).getDisplayValues():[];
+  const target=rows.map(r=>({r})).filter(x=>x.r[0]===run);
+  if(!target.length)throw Error('현재 대량분석 실행ID에 해당하는 기업 없음');
+  const sheet=nightSheet_(NIGHT_NTS.sheet,NIGHT_NTS.headers);
+  const old=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,4).getDisplayValues():[];
+  const exists=new Set(old.map(r=>r[0]+'|'+r[1]));
+  const append=[];
+  for(const x of target){
+   const r=x.r,key=run+'|'+r[1];
+   if(exists.has(key))continue;
+   append.push([run,r[1],r[2],String(r[3]||'').replace(/\D/g,''),'대기','','','','','','']);
+  }
+  if(append.length){
+   if(sheet.getMaxRows()<sheet.getLastRow()+append.length)sheet.insertRowsAfter(sheet.getMaxRows(),sheet.getLastRow()+append.length-sheet.getMaxRows());
+   sheet.getRange(sheet.getLastRow()+1,1,append.length,NIGHT_NTS.headers.length).setValues(append);
+  }
+  p.setProperties({NIGHT_NTS_ACTIVE:'1',NIGHT_NTS_RUN:run});
+  nightNtsInstall_();
+  return '국세청 상태조회 '+run+' / 신규 '+append.length+'건 예약. 결과는 '+NIGHT_NTS.sheet+' 시트';
+ });
+}
+function nightNtsTick(){
+ if(PropertiesService.getScriptProperties().getProperty('NIGHT_NTS_ACTIVE')!=='1')return;
+ return nightLock_(()=>{
+  const p=PropertiesService.getScriptProperties(),run=p.getProperty('NIGHT_NTS_RUN');
+  const sheet=nightSheet_(NIGHT_NTS.sheet,NIGHT_NTS.headers);
+  const values=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,NIGHT_NTS.headers.length).getDisplayValues():[];
+  const todo=[];
+  for(let i=0;i<values.length&&todo.length<NIGHT_NTS.size;i++){
+   const r=values[i];
+   if(r[0]===run&&['대기','재시도'].includes(r[4]))todo.push({row:i+2,biz:String(r[3]||'').replace(/\D/g,'')});
+  }
+  if(!todo.length){nightNtsStop();return '국세청 상태조회 종료';}
+  const valid=todo.filter(x=>/^\d{10}$/.test(x.biz));
+  for(const x of todo.filter(x=>!/^\d{10}$/.test(x.biz))){
+   sheet.getRange(x.row,5,1,7).setValues([['확인필요','','','','',nightNow_(),'사업자번호 10자리 아님']]);
+  }
+  if(!valid.length)return '사업자번호 오류 '+todo.length+'건 기록';
+  const key=nightNtsKey_();
+  if(!key){nightNtsStop();throw Error('NTS_API_KEY가 없습니다.');}
+  const url='https://api.odcloud.kr/api/nts-businessman/v1/status?serviceKey='+encodeURIComponent(key);
+  let response,parsed;
+  try{
+   response=UrlFetchApp.fetch(url,{method:'post',contentType:'application/json',payload:JSON.stringify({b_no:valid.map(x=>x.biz)}),muteHttpExceptions:true});
+   if(response.getResponseCode()!==200)throw Error('국세청 API HTTP '+response.getResponseCode());
+   parsed=JSON.parse(response.getContentText());
+   if(!Array.isArray(parsed.data))throw Error('국세청 API 응답에 data 배열 없음');
+  }catch(e){
+   // 키와 전체 API 응답을 로그에 기록하지 않습니다.
+   for(const x of valid)sheet.getRange(x.row,5,1,7).setValues([['재시도','','','','',nightNow_(),String(e.message||e).slice(0,180)]]);
+   return '국세청 API 일시 오류: '+valid.length+'건 다음 실행 재시도';
+  }
+  const byNo=new Map(parsed.data.map(v=>[String(v.b_no||'').replace(/\D/g,''),v]));
+  for(const x of valid){
+   const v=byNo.get(x.biz);
+   if(!v){sheet.getRange(x.row,5,1,7).setValues([['확인필요','','','','',nightNow_(),'국세청 응답에 해당 사업자번호 없음']]);continue;}
+   const code=String(v.b_stt_cd||'');
+   const label=String(v.b_stt||'');
+   const state=code==='01'?'계속사업':code==='02'?'휴업':code==='03'?'폐업':'확인필요';
+   sheet.getRange(x.row,5,1,7).setValues([['조회완료',state+' / '+label,String(v.tax_type||''),String(v.end_dt||''),code,nightNow_(),state==='확인필요'?'상태코드 미확인':'국세청 API 사업자등록 상태조회']]);
+  }
+  const remaining=values.slice(1).some(r=>r[0]===run&&['대기','재시도'].includes(r[4]));
+  if(!remaining&&todo.length<NIGHT_NTS.size)nightNtsStop();
+  return '국세청 '+valid.length+'건 조회 완료';
+ });
+}
