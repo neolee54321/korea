@@ -91,8 +91,20 @@ function nightCorpIndex_(){
   NIGHT_CORP_INDEX=index;
   return index;
 }
+function nightCorpName_(name){
+  return String(name||'').replaceAll('주식회사','').replaceAll('(주)','').replaceAll('㈜','').replaceAll(' ','').trim();
+}
 function nightCorp_(name){
-  return nightCorpIndex_()[String(name).trim()]||[];
+  const index=nightCorpIndex_();
+  const exact=index[String(name).trim()]||[];
+  if(exact.length)return exact;
+  const key=nightCorpName_(name);
+  if(!key)return [];
+  const matches=[];
+  for(const nameInDart in index){
+    if(nightCorpName_(nameInDart)===key)matches.push(...index[nameInDart]);
+  }
+  return matches;
 }
 function nightFinance_(corp,year){const key=encodeURIComponent(nightKey_());for(const basis of ['CFS','OFS']){const url='https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json?crtfc_key='+key+'&corp_code='+encodeURIComponent(corp)+'&bsns_year='+year+'&reprt_code=11011&fs_div='+basis;const data=JSON.parse(nightGet_(url).getContentText('UTF-8'));if(data.status==='013')continue;if(data.status!=='000')throw Error('DART 재무 '+year+' '+basis+': '+(data.message||data.status));const list=data.list||[];let revenue=null,receivable=null;for(const x of list){const nm=String(x.account_nm||'').replace(/\s/g,'');const amt=nightAmount_(x.thstrm_amount);if(amt===null)continue;if(revenue===null&&/^(매출액|수익\(매출액\)|영업수익)$/.test(nm))revenue=amt;if(receivable===null&&/^(매출채권|매출채권및기타채권)$/.test(nm))receivable=amt;}if(revenue!==null||receivable!==null)return {basis,revenue,receivable};}return {basis:'',revenue:null,receivable:null};}
 function nightAmount_(v){if(v===null||v===undefined||String(v).trim()==='-'||String(v).trim()==='')return null;const n=Number(String(v).replace(/,/g,''));return Number.isFinite(n)?n:null;}
@@ -116,7 +128,7 @@ function nightCorpTest(){
   const names=['티케이지휴켐스(주)','(주)에이블씨엔씨','한전산업개발(주)'];
   try{
     const index=nightCorpIndex_();
-    const result=names.map(name=>({name:name,exactMatches:(index[name]||[]).length}));
+    const result=names.map(name=>({name:name,exactMatches:(index[name]||[]).length,normalizedMatches:nightCorp_(name).length}));
     console.log(JSON.stringify({ok:true,elapsedSeconds:Math.round((Date.now()-started)/1000),sample:result}));
   }catch(e){
     console.log(JSON.stringify({ok:false,elapsedSeconds:Math.round((Date.now()-started)/1000),error:String(e.message||e).slice(0,250)}));
