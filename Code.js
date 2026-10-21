@@ -7,9 +7,9 @@
  */
 const NIGHT = Object.freeze({
   ssid:'1Why-2qkGKASeMCIhmlPzk6FFmOLkIm_adi9yz_mmeGU',
-  input:'신규20_입력대기', queue:'야간분석_작업대기열',
+  input:'대량분석_신규입력', queue:'야간분석_작업대기열',
   control:'야간분석_실행관리', errors:'야간분석_오류기록',
-  result:'신규20_시험결과', agent:'관리사배분_결과',
+  result:'대량분석_분석결과', agent:'대량분석_관리사배분',
   tickFn:'nightTick', tickMinutes:5, maxPerTick:15,
   maxRuntimeMs:220000, maxRetries:3, reportYear:2025
 });
@@ -29,7 +29,28 @@ function nightValidate_(){if(!nightKey_())throw Error('이 독립형 프로젝�
 /** 최초 한 번: 기존 시트 구조 확인 및 실행 메뉴 생성. 기존 시트의 데이터 행은 삭제하지 않습니다. */
 function nightSetup(){nightLock_(()=>{nightSheet_(NIGHT.queue,H.queue);nightSheet_(NIGHT.control,H.control);nightSheet_(NIGHT.result,H.result);nightSheet_(NIGHT.agent,H.agent);nightSheet_(NIGHT.errors,['실행ID','기업명','사업자등록번호','단계','오류유형','오류내용','발생시각','재시도결과','최종처리']);if(!nightBook_().getSheetByName(NIGHT.input))throw Error('입력 시트 없음');nightValidate_();});return '설치 준비 확인 완료';}
 /** 사용자가 실행 버튼처럼 한 번 실행. 이 시점에 입력된 모든 행을 새로운 실행으로 등록합니다. 중복 필터 없음. */
-function nightStart(){return nightLock_(()=>{nightValidate_();const props=PropertiesService.getScriptProperties();if(props.getProperty('NIGHT_ACTIVE')==='1')throw Error('이미 야간분석이 진행 중입니다.');const input=nightBook_().getSheetByName(NIGHT.input);if(!input)throw Error('입력 시트가 없습니다.');const values=input.getDataRange().getDisplayValues().slice(1);const tasks=[];const id=Utilities.formatDate(new Date(),'Asia/Seoul','yyyyMMdd-HHmmss');values.forEach((v,i)=>{if(!String(v[1]||'').trim())return;tasks.push([id,i+2,v[1],v[3],v[2],v[5],v[6],'대기','대기',0,'','','','','','비즈라인']);});if(!tasks.length)throw Error('입력 기업이 없습니다.');const q=nightSheet_(NIGHT.queue,H.queue);if(q.getMaxRows()<q.getLastRow()+tasks.length)q.insertRowsAfter(q.getMaxRows(),q.getLastRow()+tasks.length-q.getMaxRows());q.getRange(q.getLastRow()+1,1,tasks.length,16).setValues(tasks);const ctl=nightSheet_(NIGHT.control,H.control);ctl.appendRow([id,nightNow_(),nightNow_(),nightNow_(),tasks.length,0,0,0,0,'진행중','','무료 할당량 내 분할 실행 / 중복 검사 없음']);props.setProperties({NIGHT_ACTIVE:'1',NIGHT_RUN:id});nightInstallTick_();return id+' : '+tasks.length+'건 등록 완료';});}
+/** 대량분석 전용 입출력 시트 생성. 기존 20건 시험 시트는 변경하지 않습니다. */
+function nightBulkSetup(){
+ return nightLock_(()=>{
+  const ss=nightBook_();
+  const name=NIGHT.input;
+  const expected=['기업유형','기업명','전화번호','사업자번호','대표자명','기업주소','산업명'];
+  let sheet=ss.getSheetByName(name);
+  if(!sheet){sheet=ss.insertSheet(name);sheet.getRange(1,1,1,7).setValues([expected]);}
+  else {
+   const header=sheet.getRange(1,1,1,7).getDisplayValues()[0];
+   if(expected.some((h,i)=>header[i]!==h))throw Error('기존 대량 입력 시트의 A:G 헤더가 다릅니다. 자동 덮어쓰기를 중단합니다.');
+  }
+  sheet.setFrozenRows(1);
+  sheet.getRange('D:D').setNumberFormat('@');
+  nightSheet_(NIGHT.result,H.result);
+  nightSheet_(NIGHT.agent,H.agent);
+  nightSheet_(NIGHT.queue,H.queue);
+  nightSheet_(NIGHT.control,H.control);
+  return '대량분석 입력·결과 시트 준비 완료 / 기존 20건 자료 유지';
+ });
+}
+function nightStart(){return nightLock_(()=>{nightValidate_();const props=PropertiesService.getScriptProperties();if(props.getProperty('NIGHT_ACTIVE')==='1')throw Error('이미 야간분석이 진행 중입니다.');const input=nightBook_().getSheetByName(NIGHT.input);if(!input)throw Error('대량분석_신규입력 시트가 없습니다. nightBulkSetup을 먼저 실행하세요.');const expected=['기업유형','기업명','전화번호','사업자번호','대표자명','기업주소','산업명'];const header=input.getRange(1,1,1,7).getDisplayValues()[0];if(expected.some((h,i)=>header[i]!==h))throw Error('비즈라인 입력 헤더 A:G 순서가 맞지 않습니다.');const values=input.getDataRange().getDisplayValues().slice(1);const tasks=[];const id=Utilities.formatDate(new Date(),'Asia/Seoul','yyyyMMdd-HHmmss');values.forEach((v,i)=>{if(!String(v[1]||'').trim())return;tasks.push([id,i+2,v[1],v[3],v[2],v[5],v[6],'대기','대기',0,'','','','','','비즈라인']);});if(!tasks.length)throw Error('입력 기업이 없습니다.');const q=nightSheet_(NIGHT.queue,H.queue);if(q.getMaxRows()<q.getLastRow()+tasks.length)q.insertRowsAfter(q.getMaxRows(),q.getLastRow()+tasks.length-q.getMaxRows());q.getRange(q.getLastRow()+1,1,tasks.length,16).setValues(tasks);const ctl=nightSheet_(NIGHT.control,H.control);ctl.appendRow([id,nightNow_(),nightNow_(),nightNow_(),tasks.length,0,0,0,0,'진행중','','무료 할당량 내 분할 실행 / 중복 검사 없음']);props.setProperties({NIGHT_ACTIVE:'1',NIGHT_RUN:id});nightInstallTick_();return id+' : '+tasks.length+'건 등록 완료';});}
 function nightInstallTick_(){ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===NIGHT.tickFn).forEach(t=>ScriptApp.deleteTrigger(t));ScriptApp.newTrigger(NIGHT.tickFn).timeBased().everyMinutes(NIGHT.tickMinutes).create();}
 /** 기존 작업대기열 그대로 재개: 신규 등록/중복검사/결과 초기화 없음. */
 function nightResume(){
