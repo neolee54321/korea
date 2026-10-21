@@ -425,7 +425,8 @@ function nightNtsTick(){
    const state=code==='01'?'계속사업':code==='02'?'휴업':code==='03'?'폐업':'확인필요';
    sheet.getRange(x.row,5,1,7).setValues([['조회완료',state+' / '+label,String(v.tax_type||''),String(v.end_dt||''),code,nightNow_(),state==='확인필요'?'상태코드 미확인':'국세청 API 사업자등록 상태조회']]);
   }
-  const remaining=values.slice(1).some(r=>r[0]===run&&['대기','재시도'].includes(r[4]));
+  const latest=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,5).getDisplayValues():[];
+  const remaining=latest.some(r=>r[0]===run&&['대기','재시도'].includes(r[4]));
   if(!remaining&&todo.length<NIGHT_NTS.size)nightNtsStop();
   return '국세청 '+valid.length+'건 조회 완료';
  });
