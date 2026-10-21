@@ -1,0 +1,13 @@
+# 인증 정보, 회사 데이터, 로컬 파일 제외
+.clasprc.json
+.clasp.json.local
+.env
+.env.*
+!.env.example
+credentials.json
+token.json
+*.csv
+*.xlsx
+*.xls
+node_modules/
+.DS_Store
