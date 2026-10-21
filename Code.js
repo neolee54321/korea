@@ -31,6 +31,33 @@ function nightSetup(){nightLock_(()=>{nightSheet_(NIGHT.queue,H.queue);nightShee
 /** 사용자가 실행 버튼처럼 한 번 실행. 이 시점에 입력된 모든 행을 새로운 실행으로 등록합니다. 중복 필터 없음. */
 function nightStart(){return nightLock_(()=>{nightValidate_();const props=PropertiesService.getScriptProperties();if(props.getProperty('NIGHT_ACTIVE')==='1')throw Error('이미 야간분석이 진행 중입니다.');const input=nightBook_().getSheetByName(NIGHT.input);if(!input)throw Error('입력 시트가 없습니다.');const values=input.getDataRange().getDisplayValues().slice(1);const tasks=[];const id=Utilities.formatDate(new Date(),'Asia/Seoul','yyyyMMdd-HHmmss');values.forEach((v,i)=>{if(!String(v[1]||'').trim())return;tasks.push([id,i+2,v[1],v[3],v[2],v[5],v[6],'대기','대기',0,'','','','','','비즈라인']);});if(!tasks.length)throw Error('입력 기업이 없습니다.');const q=nightSheet_(NIGHT.queue,H.queue);if(q.getMaxRows()<q.getLastRow()+tasks.length)q.insertRowsAfter(q.getMaxRows(),q.getLastRow()+tasks.length-q.getMaxRows());q.getRange(q.getLastRow()+1,1,tasks.length,16).setValues(tasks);const ctl=nightSheet_(NIGHT.control,H.control);ctl.appendRow([id,nightNow_(),nightNow_(),nightNow_(),tasks.length,0,0,0,0,'진행중','','무료 할당량 내 분할 실행 / 중복 검사 없음']);props.setProperties({NIGHT_ACTIVE:'1',NIGHT_RUN:id});nightInstallTick_();return id+' : '+tasks.length+'건 등록 완료';});}
 function nightInstallTick_(){ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===NIGHT.tickFn).forEach(t=>ScriptApp.deleteTrigger(t));ScriptApp.newTrigger(NIGHT.tickFn).timeBased().everyMinutes(NIGHT.tickMinutes).create();}
+/** 기존 작업대기열 그대로 재개: 신규 등록/중복검사/결과 초기화 없음. */
+function nightResume(){
+  return nightLock_(()=>{
+    nightValidate_();
+    const props=PropertiesService.getScriptProperties();
+    if(props.getProperty('NIGHT_ACTIVE')==='1')return '이미 실행 중';
+    const id=props.getProperty('NIGHT_RUN');
+    if(!id)throw Error('재개할 기존 실행ID가 없습니다.');
+    const q=nightSheet_(NIGHT.queue,H.queue);
+    const rows=q.getLastRow()>1?q.getRange(2,1,q.getLastRow()-1,16).getValues():[];
+    let waiting=0;
+    for(let i=0;i<rows.length;i++){
+      const r=rows[i];
+      if(r[0]!==id)continue;
+      if(r[8]==='진행중')q.getRange(i+2,8,1,2).setValues([['대기','대기']]);
+      if(r[8]==='재시도'){
+        q.getRange(i+2,10,1,3).setValues([[0,'','']]);
+      }
+      if(['대기','재시도','진행중'].includes(r[8]))waiting++;
+    }
+    if(!waiting)throw Error('재개할 대기 작업이 없습니다.');
+    props.setProperty('NIGHT_ACTIVE','1');
+    nightInstallTick_();
+    nightUpdateControl_(id);
+    return '기존 실행 '+id+' / 남은 작업 '+waiting+'건 재개';
+  });
+}
 function nightStop(){nightLock_(()=>{PropertiesService.getScriptProperties().setProperty('NIGHT_ACTIVE','0');nightClearTick_();});}
 function nightClearTick_(){ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===NIGHT.tickFn).forEach(t=>ScriptApp.deleteTrigger(t));}
 /** Google 서버 트리거: 실패 행은 기록하고 다음 회사로 진행합니다. */
