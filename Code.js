@@ -107,3 +107,16 @@ function nightDartDiagnostic(){
   const zip=bytes.length>3&&bytes[0]===80&&bytes[1]===75;
   console.log(JSON.stringify({http:r.getResponseCode(),zip:zip,bytes:bytes.length,contentType:r.getHeaders()['Content-Type']||'unknown'}));
 }
+
+/** 독립 시험: DART 기업목록 ZIP 압축 해제 및 지정 기업 검색만 확인. 작업대기열은 변경하지 않음. */
+function nightCorpTest(){
+  const started=Date.now();
+  const names=['티케이지휴켐스(주)','(주)에이블씨엔씨','한전산업개발(주)'];
+  try{
+    const index=nightCorpIndex_();
+    const result=names.map(name=>({name:name,exactMatches:(index[name]||[]).length}));
+    console.log(JSON.stringify({ok:true,elapsedSeconds:Math.round((Date.now()-started)/1000),sample:result}));
+  }catch(e){
+    console.log(JSON.stringify({ok:false,elapsedSeconds:Math.round((Date.now()-started)/1000),error:String(e.message||e).slice(0,250)}));
+  }
+}
