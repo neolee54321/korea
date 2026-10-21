@@ -61,12 +61,12 @@ function nightCorpIndex_(){
   if(!zipped){
     const url='https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key='+encodeURIComponent(nightKey_());
     zipped=nightGet_(url).getBlob();
-    // 인증 실패 시 응답은 ZIP이 아닌 JSON/XML 오류일 수 있으므로 파일 저장 전에 확인
-    let test;
-    try{test=Utilities.unzip(zipped);}catch(e){
-      throw Error('DART 기업목록 ZIP 응답 확인 실패 (API 키/할당량 확인 필요)');
+    // ZIP은 다운로드 직후 반복 해제하지 않고 캐시 저장 후 한 번만 해제합니다.
+    // 다운로드 정상 여부와 압축 해제 오류를 별도로 기록합니다.
+    const raw=zipped.getBytes();
+    if(raw.length<4 || raw[0]!==80 || raw[1]!==75){
+      throw Error('DART 기업목록 API 응답이 ZIP이 아닙니다 (HTTP 200, 바이트 '+raw.length+')');
     }
-    if(!test.length)throw Error('DART 기업목록 ZIP에 파일이 없습니다.');
     const oldId=props.getProperty('NIGHT_CORP_CACHE_FILE');
     const cache=DriveApp.createFile(zipped.setName('night-dart-corpcode-cache.zip'));
     props.setProperties({NIGHT_CORP_CACHE_FILE:cache.getId(),NIGHT_CORP_CACHE_TIME:String(Date.now())});
@@ -74,7 +74,7 @@ function nightCorpIndex_(){
   }
   let xml;
   try{xml=Utilities.unzip(zipped)[0].getDataAsString('UTF-8');}
-  catch(e){props.deleteProperty('NIGHT_CORP_CACHE_TIME');throw Error('DART 기업목록 압축 해제 실패');}
+  catch(e){props.deleteProperty('NIGHT_CORP_CACHE_TIME');throw Error('DART ZIP 압축 해제 실패: '+String(e.message||e).slice(0,180));}
   const index=Object.create(null);
   const blocks=xml.match(/<list>[\s\S]*?<\/list>/g)||[];
   if(!blocks.length)throw Error('DART 기업목록 데이터가 비어 있습니다.');
