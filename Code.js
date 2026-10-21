@@ -140,11 +140,11 @@ function nightCorp_(name){
   return matches;
 }
 function nightVerifyCorp_(corpCode,bizNo){
-  if(!/^\\d{10}$/.test(bizNo))return {ok:false,reason:'사업자번호 10자리 확인 필요'};
+  if(!/^\d{10}$/.test(bizNo))return {ok:false,reason:'사업자번호 10자리 확인 필요'};
   const url='https://opendart.fss.or.kr/api/company.json?crtfc_key='+encodeURIComponent(nightKey_())+'&corp_code='+encodeURIComponent(corpCode);
   const data=JSON.parse(nightGet_(url).getContentText('UTF-8'));
   if(data.status!=='000')return {ok:false,reason:'DART 기업개황 조회 실패: '+String(data.status||'응답 없음')};
-  const dartNo=String(data.bizr_no||'').replace(/\\D/g,'');
+  const dartNo=String(data.bizr_no||'').replace(/\D/g,'');
   if(!dartNo)return {ok:false,reason:'DART 기업개황에 사업자번호 없음'};
   return dartNo===bizNo?{ok:true,reason:'사업자번호 일치'}:{ok:false,reason:'입력 사업자번호와 DART 사업자번호 불일치'};
 }
