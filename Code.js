@@ -72,6 +72,8 @@ function nightCorpIndex_(){
     props.setProperties({NIGHT_CORP_CACHE_FILE:cache.getId(),NIGHT_CORP_CACHE_TIME:String(Date.now())});
     if(oldId){try{DriveApp.getFileById(oldId).setTrashed(true);}catch(e){}}
   }
+  // DART responds with application/x-msdownload; Apps Script unzip requires application/zip.
+  zipped=zipped.setContentType('application/zip');
   let xml;
   try{xml=Utilities.unzip(zipped)[0].getDataAsString('UTF-8');}
   catch(e){props.deleteProperty('NIGHT_CORP_CACHE_TIME');throw Error('DART ZIP 압축 해제 실패: '+String(e.message||e).slice(0,180));}
