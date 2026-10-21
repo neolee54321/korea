@@ -34,7 +34,7 @@ function nightInstallTick_(){ScriptApp.getProjectTriggers().filter(t=>t.getHandl
 function nightStop(){nightLock_(()=>{PropertiesService.getScriptProperties().setProperty('NIGHT_ACTIVE','0');nightClearTick_();});}
 function nightClearTick_(){ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===NIGHT.tickFn).forEach(t=>ScriptApp.deleteTrigger(t));}
 /** Google 서버 트리거: 실패 행은 기록하고 다음 회사로 진행합니다. */
-function nightTick(){if(PropertiesService.getScriptProperties().getProperty('NIGHT_ACTIVE')!=='1')return;nightLock_(()=>{const start=Date.now(),id=PropertiesService.getScriptProperties().getProperty('NIGHT_RUN');const q=nightSheet_(NIGHT.queue,H.queue);const n=q.getLastRow();if(n<2)return;const rows=q.getRange(2,1,n-1,16).getValues();let done=0;for(let i=0;i<rows.length&&done<NIGHT.maxPerTick&&Date.now()-start<NIGHT.maxRuntimeMs;i++){const r=rows[i];if(r[0]!==id||!['대기','재시도'].includes(r[8]))continue;if(r[10]&&new Date(r[10]).getTime()>Date.now())continue;const row=i+2;done++;try{q.getRange(row,8,1,2).setValues([['DART 분석','진행중']]);const outcome=nightAnalyze_(r);const result=nightSheet_(NIGHT.result,H.result);result.appendRow(outcome.result);const resultRow=result.getLastRow();const agent=nightSheet_(NIGHT.agent,H.agent);agent.appendRow([id,'',r[2],r[3],r[4],r[5],r[6],outcome.signal,outcome.level,outcome.evidence,'검토대기','배정대기','재무징후는 실제 미수채권 보유의 증거가 아님']);q.getRange(row,8,1,8).setValues([['완료',outcome.status,Number(r[9])+1,'','',outcome.corpCode,nightNow_(),resultRow]]);}catch(e){const tries=Number(r[9])+1;const retry=tries<NIGHT.maxRetries;const delay=Math.min(60,Math.pow(2,tries)*5);const next=retry?new Date(Date.now()+delay*60000):'';q.getRange(row,8,1,5).setValues([['DART 분석',retry?'재시도':'실패',tries,next,String(e.message||e).slice(0,500)]]);nightSheet_(NIGHT.errors,['실행ID','기업명','사업자등록번호','단계','오류유형','오류내용','발생시각','재시도결과','최종처리']).appendRow([id,r[2],r[3],'DART',retry?'재시도':'최종실패',String(e.message||e),nightNow_(),retry?'예정':'없음',retry?'대기':'실패']);}}
+function nightTick(){if(PropertiesService.getScriptProperties().getProperty('NIGHT_ACTIVE')!=='1')return;nightLock_(()=>{const start=Date.now(),id=PropertiesService.getScriptProperties().getProperty('NIGHT_RUN');const q=nightSheet_(NIGHT.queue,H.queue);const n=q.getLastRow();if(n<2){PropertiesService.getScriptProperties().setProperty('NIGHT_ACTIVE','0');nightClearTick_();return;}const rows=q.getRange(2,1,n-1,16).getValues();let done=0;for(let i=0;i<rows.length&&done<NIGHT.maxPerTick&&Date.now()-start<NIGHT.maxRuntimeMs;i++){const r=rows[i];if(r[0]!==id||!['대기','재시도'].includes(r[8]))continue;if(r[10]&&new Date(r[10]).getTime()>Date.now())continue;const row=i+2;done++;try{q.getRange(row,8,1,2).setValues([['DART 분석','진행중']]);const outcome=nightAnalyze_(r);const result=nightSheet_(NIGHT.result,H.result);result.appendRow(outcome.result);const resultRow=result.getLastRow();const agent=nightSheet_(NIGHT.agent,H.agent);agent.appendRow([id,'',r[2],r[3],r[4],r[5],r[6],outcome.signal,outcome.level,outcome.evidence,'검토대기','배정대기','재무징후는 실제 미수채권 보유의 증거가 아님']);q.getRange(row,8,1,8).setValues([['완료',outcome.status,Number(r[9])+1,'','',outcome.corpCode,nightNow_(),resultRow]]);}catch(e){const tries=Number(r[9])+1;const retry=tries<NIGHT.maxRetries;const delay=Math.min(60,Math.pow(2,tries)*5);const next=retry?new Date(Date.now()+delay*60000):'';q.getRange(row,8,1,5).setValues([['DART 분석',retry?'재시도':'실패',tries,next,String(e.message||e).slice(0,500)]]);nightSheet_(NIGHT.errors,['실행ID','기업명','사업자등록번호','단계','오류유형','오류내용','발생시각','재시도결과','최종처리']).appendRow([id,r[2],r[3],'DART',retry?'재시도':'최종실패',String(e.message||e),nightNow_(),retry?'예정':'없음',retry?'대기':'실패']);}}
 nightUpdateControl_(id);});}
 function nightUpdateControl_(id){const q=nightSheet_(NIGHT.queue,H.queue);const values=q.getLastRow()>1?q.getRange(2,1,q.getLastRow()-1,16).getValues().filter(r=>r[0]===id):[];const count=s=>values.filter(r=>r[8]===s).length;const completed=count('완료'),partial=count('부분완료'),failed=count('실패'),held=count('보류');const waiting=values.length-completed-partial-failed-held;const ctl=nightSheet_(NIGHT.control,H.control);const c=ctl.getDataRange().getValues();for(let i=1;i<c.length;i++)if(c[i][0]===id){ctl.getRange(i+1,4,1,8).setValues([[nightNow_(),values.length,completed,partial,held,failed,waiting?'진행중':'완료',waiting?'약 5분 간격으로 재개':'',waiting?'API 할당량/오류에 따라 처리 시간 변동':'완료: 결과 검토 필요']]);break;}if(!waiting){PropertiesService.getScriptProperties().setProperty('NIGHT_ACTIVE','0');nightClearTick_();}}
 function nightAnalyze_(r){const name=String(r[2]).trim();const reg=String(r[3]||'').replace(/\D/g,'');const phone=String(r[4]||'');const address=String(r[5]||'');const found=nightCorp_(name);const date=nightDate_(nightNow_());if(found.length!==1){const reason=found.length?'동명 또는 유사 기업 복수: DART 고유번호 수동 확인 필요':'DART 기업명 일치 항목 없음';return {corpCode:'',status:'보류',signal:'미검증',level:'보류',evidence:reason,result:[name,reg,phone,address,'','사업자번호 국세청 미검증','','','', '보류','재무 분석 불가',reason,date+' / DART 기업개황']};}
@@ -42,7 +42,56 @@ const corp=found[0];const y25=nightFinance_(corp.code,2025);const y24=nightFinan
 function nightWon_(n){return n===null?'확인 불가':Math.round(n).toLocaleString('ko-KR')+'원';}
 function nightGet_(url){const response=UrlFetchApp.fetch(url,{muteHttpExceptions:true,followRedirects:true});const code=response.getResponseCode();if(code===429||code>=500)throw Error('API 일시 오류 HTTP '+code);if(code!==200)throw Error('API HTTP '+code);return response;}
 /** DART 고유번호 전체 목록을 읽어 기업명 '정확히 일치'만 선택; 유사명 자동매칭 금지. */
-function nightCorp_(name){const url='https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key='+encodeURIComponent(nightKey_());const zipped=nightGet_(url).getBlob();let xml;try{const files=Utilities.unzip(zipped);xml=files[0].getDataAsString('UTF-8');}catch(e){throw Error('DART 기업목록 다운로드 실패 또는 API 인증 오류: '+zipped.getDataAsString().slice(0,160));}const out=[];const blocks=xml.match(/<list>[\s\S]*?<\/list>/g)||[];for(const block of blocks){const nm=/<corp_name>([\s\S]*?)<\/corp_name>/.exec(block);const code=/<corp_code>([^<]+)<\/corp_code>/.exec(block);if(nm&&code&&nm[1].replace(/&amp;/g,'&').trim()===name)out.push({code:code[1]});}return out;}
+/**
+ * DART 기업목록: 한 번 내려받은 ZIP을 Drive 비공개 파일에 24시간 보관합니다.
+ * 매 틱마다 API를 호출하지 않으며, 틱 내에서도 압축 해제와 XML 스캔을 한 번만 합니다.
+ * 목록은 정확한 기업명으로만 매칭합니다. 동명이인은 자동으로 선택하지 않습니다.
+ * 주의: ZIP 파일은 해당 Google 계정의 Drive에 저장되며 공유하지 않습니다.
+ */
+var NIGHT_CORP_INDEX = null;
+function nightCorpIndex_(){
+  if(NIGHT_CORP_INDEX !== null)return NIGHT_CORP_INDEX;
+  const props=PropertiesService.getScriptProperties();
+  const stamp=Number(props.getProperty('NIGHT_CORP_CACHE_TIME')||0);
+  const fileId=props.getProperty('NIGHT_CORP_CACHE_FILE');
+  let zipped=null;
+  if(fileId && Date.now()-stamp<24*60*60*1000){
+    try{zipped=DriveApp.getFileById(fileId).getBlob();}catch(e){zipped=null;}
+  }
+  if(!zipped){
+    const url='https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key='+encodeURIComponent(nightKey_());
+    zipped=nightGet_(url).getBlob();
+    // 인증 실패 시 응답은 ZIP이 아닌 JSON/XML 오류일 수 있으므로 파일 저장 전에 확인
+    let test;
+    try{test=Utilities.unzip(zipped);}catch(e){
+      throw Error('DART 기업목록 ZIP 응답 확인 실패 (API 키/할당량 확인 필요)');
+    }
+    if(!test.length)throw Error('DART 기업목록 ZIP에 파일이 없습니다.');
+    const oldId=props.getProperty('NIGHT_CORP_CACHE_FILE');
+    const cache=DriveApp.createFile(zipped.setName('night-dart-corpcode-cache.zip'));
+    props.setProperties({NIGHT_CORP_CACHE_FILE:cache.getId(),NIGHT_CORP_CACHE_TIME:String(Date.now())});
+    if(oldId){try{DriveApp.getFileById(oldId).setTrashed(true);}catch(e){}}
+  }
+  let xml;
+  try{xml=Utilities.unzip(zipped)[0].getDataAsString('UTF-8');}
+  catch(e){props.deleteProperty('NIGHT_CORP_CACHE_TIME');throw Error('DART 기업목록 압축 해제 실패');}
+  const index=Object.create(null);
+  const blocks=xml.match(/<list>[\s\S]*?<\/list>/g)||[];
+  if(!blocks.length)throw Error('DART 기업목록 데이터가 비어 있습니다.');
+  for(const block of blocks){
+    const nm=/<corp_name>([\s\S]*?)<\/corp_name>/.exec(block);
+    const code=/<corp_code>([^<]+)<\/corp_code>/.exec(block);
+    if(!nm||!code)continue;
+    const name=nm[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').trim();
+    if(!index[name])index[name]=[];
+    index[name].push({code:code[1]});
+  }
+  NIGHT_CORP_INDEX=index;
+  return index;
+}
+function nightCorp_(name){
+  return nightCorpIndex_()[String(name).trim()]||[];
+}
 function nightFinance_(corp,year){const key=encodeURIComponent(nightKey_());for(const basis of ['CFS','OFS']){const url='https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json?crtfc_key='+key+'&corp_code='+encodeURIComponent(corp)+'&bsns_year='+year+'&reprt_code=11011&fs_div='+basis;const data=JSON.parse(nightGet_(url).getContentText('UTF-8'));if(data.status==='013')continue;if(data.status!=='000')throw Error('DART 재무 '+year+' '+basis+': '+(data.message||data.status));const list=data.list||[];let revenue=null,receivable=null;for(const x of list){const nm=String(x.account_nm||'').replace(/\s/g,'');const amt=nightAmount_(x.thstrm_amount);if(amt===null)continue;if(revenue===null&&/^(매출액|수익\(매출액\)|영업수익)$/.test(nm))revenue=amt;if(receivable===null&&/^(매출채권|매출채권및기타채권)$/.test(nm))receivable=amt;}if(revenue!==null||receivable!==null)return {basis,revenue,receivable};}return {basis:'',revenue:null,receivable:null};}
 function nightAmount_(v){if(v===null||v===undefined||String(v).trim()==='-'||String(v).trim()==='')return null;const n=Number(String(v).replace(/,/g,''));return Number.isFinite(n)?n:null;}
 /** 설치 후 확인용. 인증정보 자체는 표시하지 않습니다. */
