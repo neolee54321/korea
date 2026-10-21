@@ -38,7 +38,13 @@ function nightTick(){if(PropertiesService.getScriptProperties().getProperty('NIG
 nightUpdateControl_(id);});}
 function nightUpdateControl_(id){const q=nightSheet_(NIGHT.queue,H.queue);const values=q.getLastRow()>1?q.getRange(2,1,q.getLastRow()-1,16).getValues().filter(r=>r[0]===id):[];const count=s=>values.filter(r=>r[8]===s).length;const completed=count('완료'),partial=count('부분완료'),failed=count('실패'),held=count('보류');const waiting=values.length-completed-partial-failed-held;const ctl=nightSheet_(NIGHT.control,H.control);const c=ctl.getDataRange().getValues();for(let i=1;i<c.length;i++)if(c[i][0]===id){ctl.getRange(i+1,4,1,8).setValues([[nightNow_(),values.length,completed,partial,held,failed,waiting?'진행중':'완료',waiting?'약 5분 간격으로 재개':'',waiting?'API 할당량/오류에 따라 처리 시간 변동':'완료: 결과 검토 필요']]);break;}if(!waiting){PropertiesService.getScriptProperties().setProperty('NIGHT_ACTIVE','0');nightClearTick_();}}
 function nightAnalyze_(r){const name=String(r[2]).trim();const reg=String(r[3]||'').replace(/\D/g,'');const phone=String(r[4]||'');const address=String(r[5]||'');const found=nightCorp_(name);const date=nightDate_(nightNow_());if(found.length!==1){const reason=found.length?'동명 또는 유사 기업 복수: DART 고유번호 수동 확인 필요':'DART 기업명 일치 항목 없음';return {corpCode:'',status:'보류',signal:'미검증',level:'보류',evidence:reason,result:[name,reg,phone,address,'','사업자번호 국세청 미검증','','','', '보류','재무 분석 불가',reason,date+' / DART 기업개황']};}
-const corp=found[0];const y25=nightFinance_(corp.code,2025);const y24=nightFinance_(corp.code,2024);const basis=y25.basis||y24.basis||'';const fmt=(f,y)=>y+' 매출 '+nightWon_(f.revenue)+', 매출채권 '+nightWon_(f.receivable);const changes=fmt(y24,2024)+' / '+fmt(y25,2025);const enough=y25.revenue!==null&&y24.revenue!==null;const status=enough?'완료':'부분완료';const signal=enough&&y25.receivable!==null&&y24.receivable!==null&&y25.receivable>y24.receivable?'매출채권 증가 (연체 여부 미확인)':'재무검토 필요';const note='연체·손실충당금 주석 미검증: 숫자 추정 금지';const evidence='DART '+corp.code+' / '+basis+' / 2024·2025 사업보고서 재무제표 / 금액 원';return {corpCode:corp.code,status,signal,level:status,evidence,result:[name,reg,phone,address,corp.code,'DART 기업명 일치 / 사업자번호 국세청 미검증',basis,changes,note,status,signal,status==='완료'?'':'연도별 항목 일부 누락',date+' / '+evidence]};}
+const corp=found[0];
+const verified=nightVerifyCorp_(corp.code,reg);
+if(!verified.ok){
+  const reason=verified.reason;
+  return {corpCode:corp.code,status:'보류',signal:'미검증',level:'보류',evidence:reason,result:[name,reg,phone,address,corp.code,'DART 사업자번호 대조 불일치 또는 미확인','','','','보류','재무 분석 보류',reason,date+' / DART 기업개황']};
+}
+const y25=nightFinance_(corp.code,2025);const y24=nightFinance_(corp.code,2024);const basis=y25.basis||y24.basis||'';const fmt=(f,y)=>y+' 매출 '+nightWon_(f.revenue)+', 매출채권 '+nightWon_(f.receivable);const changes=fmt(y24,2024)+' / '+fmt(y25,2025);const enough=y25.revenue!==null&&y24.revenue!==null;const status=enough?'완료':'부분완료';const signal=enough&&y25.receivable!==null&&y24.receivable!==null&&y25.receivable>y24.receivable?'매출채권 증가 (연체 여부 미확인)':'재무검토 필요';const note='연체·손실충당금 주석 미검증: 숫자 추정 금지';const evidence='DART '+corp.code+' / '+basis+' / 2024·2025 사업보고서 재무제표 / 금액 원';return {corpCode:corp.code,status,signal,level:status,evidence,result:[name,reg,phone,address,corp.code,'DART 기업명 및 사업자번호 일치 / 국세청 영업상태 미검증',basis,changes,note,status,signal,status==='완료'?'':'연도별 항목 일부 누락',date+' / '+evidence]};}
 function nightWon_(n){return n===null?'확인 불가':Math.round(n).toLocaleString('ko-KR')+'원';}
 function nightGet_(url){const response=UrlFetchApp.fetch(url,{muteHttpExceptions:true,followRedirects:true});const code=response.getResponseCode();if(code===429||code>=500)throw Error('API 일시 오류 HTTP '+code);if(code!==200)throw Error('API HTTP '+code);return response;}
 /** DART 고유번호 전체 목록을 읽어 기업명 '정확히 일치'만 선택; 유사명 자동매칭 금지. */
@@ -105,6 +111,15 @@ function nightCorp_(name){
     if(nightCorpName_(nameInDart)===key)matches.push(...index[nameInDart]);
   }
   return matches;
+}
+function nightVerifyCorp_(corpCode,bizNo){
+  if(!/^\\d{10}$/.test(bizNo))return {ok:false,reason:'사업자번호 10자리 확인 필요'};
+  const url='https://opendart.fss.or.kr/api/company.json?crtfc_key='+encodeURIComponent(nightKey_())+'&corp_code='+encodeURIComponent(corpCode);
+  const data=JSON.parse(nightGet_(url).getContentText('UTF-8'));
+  if(data.status!=='000')return {ok:false,reason:'DART 기업개황 조회 실패: '+String(data.status||'응답 없음')};
+  const dartNo=String(data.bizr_no||'').replace(/\\D/g,'');
+  if(!dartNo)return {ok:false,reason:'DART 기업개황에 사업자번호 없음'};
+  return dartNo===bizNo?{ok:true,reason:'사업자번호 일치'}:{ok:false,reason:'입력 사업자번호와 DART 사업자번호 불일치'};
 }
 function nightFinance_(corp,year){const key=encodeURIComponent(nightKey_());for(const basis of ['CFS','OFS']){const url='https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json?crtfc_key='+key+'&corp_code='+encodeURIComponent(corp)+'&bsns_year='+year+'&reprt_code=11011&fs_div='+basis;const data=JSON.parse(nightGet_(url).getContentText('UTF-8'));if(data.status==='013')continue;if(data.status!=='000')throw Error('DART 재무 '+year+' '+basis+': '+(data.message||data.status));const list=data.list||[];let revenue=null,receivable=null;for(const x of list){const nm=String(x.account_nm||'').replace(/\s/g,'');const amt=nightAmount_(x.thstrm_amount);if(amt===null)continue;if(revenue===null&&/^(매출액|수익\(매출액\)|영업수익)$/.test(nm))revenue=amt;if(receivable===null&&/^(매출채권|매출채권및기타채권)$/.test(nm))receivable=amt;}if(revenue!==null||receivable!==null)return {basis,revenue,receivable};}return {basis:'',revenue:null,receivable:null};}
 function nightAmount_(v){if(v===null||v===undefined||String(v).trim()==='-'||String(v).trim()==='')return null;const n=Number(String(v).replace(/,/g,''));return Number.isFinite(n)?n:null;}
