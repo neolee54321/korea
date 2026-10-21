@@ -186,13 +186,14 @@ function nightGet_(url){const response=UrlFetchApp.fetch(url,{muteHttpExceptions
  * 주의: ZIP 파일은 해당 Google 계정의 Drive에 저장되며 공유하지 않습니다.
  */
 var NIGHT_CORP_INDEX = null;
+var NIGHT_CORP_NORMALIZED=null;
 function nightCorpIndex_(){
   if(NIGHT_CORP_INDEX !== null)return NIGHT_CORP_INDEX;
   const props=PropertiesService.getScriptProperties();
   const stamp=Number(props.getProperty('NIGHT_CORP_CACHE_TIME')||0);
   const fileId=props.getProperty('NIGHT_CORP_CACHE_FILE');
   let zipped=null;
-  if(fileId && Date.now()-stamp<24*60*60*1000){
+  if(fileId && Date.now()-stamp<7*24*60*60*1000){
     try{zipped=DriveApp.getFileById(fileId).getBlob();}catch(e){zipped=null;}
   }
   if(!zipped){
@@ -225,6 +226,15 @@ function nightCorpIndex_(){
     if(!index[name])index[name]=[];
     index[name].push({code:code[1]});
   }
+  // 기업목록 1회 해제 시 정규화된 이름별 색인도 구축하여 반복 전체 검색을 제거합니다.
+  const normalized=Object.create(null);
+  for(const nameInDart in index){
+    const key=nightCorpName_(nameInDart);
+    if(!key)continue;
+    if(!normalized[key])normalized[key]=[];
+    normalized[key].push(...index[nameInDart]);
+  }
+  NIGHT_CORP_NORMALIZED=normalized;
   NIGHT_CORP_INDEX=index;
   return index;
 }
@@ -237,11 +247,7 @@ function nightCorp_(name){
   if(exact.length)return exact;
   const key=nightCorpName_(name);
   if(!key)return [];
-  const matches=[];
-  for(const nameInDart in index){
-    if(nightCorpName_(nameInDart)===key)matches.push(...index[nameInDart]);
-  }
-  return matches;
+  return (NIGHT_CORP_NORMALIZED&&NIGHT_CORP_NORMALIZED[key])||[];
 }
 function nightVerifyCorp_(corpCode,bizNo){
   if(!/^\d{10}$/.test(bizNo))return {ok:false,reason:'사업자번호 10자리 확인 필요'};
