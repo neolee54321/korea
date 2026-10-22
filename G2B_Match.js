@@ -22,40 +22,52 @@ function g2bMatchContracts() {
   const day=Utilities.formatDate(new Date(Date.now()-3*86400000),'Asia/Seoul','yyyyMMdd');
   const output=[['조회일','분야','사업자번호','업체명','담당관리사','계약명','계약번호','계약금액','계약일','확인수준']];
   const diagnostics=[];
+  const seen={};
   Object.keys(operations).forEach(category=>{
-    const q={ServiceKey:key,numOfRows:100,pageNo:1,type:'json',inqryDiv:1,inqryBgnDt:day+'0000',inqryEndDt:day+'2359'};
-    const base='https://apis.data.go.kr/1230000/ao/CntrctInfoService/'+operations[category];
-    const url=base+'?'+Object.keys(q).map(k=>k+'='+encodeURIComponent(q[k])).join('&');
-    const res=UrlFetchApp.fetch(url,{muteHttpExceptions:true});
-    let data={};try{data=JSON.parse(res.getContentText());}catch(e){}
-    const h=(data.response||{}).header||{};
-    const body=(data.response||{}).body||{};
-    const code=String(h.resultCode==null?'미확인':h.resultCode);
-    diagnostics.push([new Date(),category,res.getResponseCode(),code,body.totalCount||0]);
-    if(res.getResponseCode()!==200||!['0','00'].includes(code))return;
-    let items=Array.isArray(body.items)?body.items:(body.items&&body.items.item)||[];
-    if(!Array.isArray(items))items=items?[items]:[];
-    items.forEach(item=>{
-      const list=String(item.corpList||'');
-      const found=list.match(/\d{10}/g)||[];
-      found.forEach(no=>{
-        if(!targets[no])return;
-        output.push([day,category,no,targets[no].name,targets[no].agent,
-          String(item.cntrctNm||item.cntrctName||''),
-          String(item.untyCntrctNo||''),
-          String(item.totCntrctAmt||''),
-          String(item.cntrctCnclsDate||''),
-          '계약정보 일치·미수금 미확인']);
+    let total=0,processed=0,pages=0,code='미확인',http=0;
+    for(let page=1;page<=3;page++){
+      const q={ServiceKey:key,numOfRows:100,pageNo:page,type:'json',inqryDiv:1,inqryBgnDt:day+'0000',inqryEndDt:day+'2359'};
+      const base='https://apis.data.go.kr/1230000/ao/CntrctInfoService/'+operations[category];
+      const url=base+'?'+Object.keys(q).map(k=>k+'='+encodeURIComponent(q[k])).join('&');
+      const res=UrlFetchApp.fetch(url,{muteHttpExceptions:true});
+      http=res.getResponseCode();
+      let data={};try{data=JSON.parse(res.getContentText());}catch(e){}
+      const h=(data.response||{}).header||{};
+      const body=(data.response||{}).body||{};
+      code=String(h.resultCode==null?'미확인':h.resultCode);
+      total=Number(body.totalCount||0);
+      if(http!==200||!['0','00'].includes(code))break;
+      let items=Array.isArray(body.items)?body.items:(body.items&&body.items.item)||[];
+      if(!Array.isArray(items))items=items?[items]:[];
+      if(!items.length)break;
+      pages++;
+      processed+=items.length;
+      items.forEach(item=>{
+        const list=String(item.corpList||'');
+        const found=list.match(/\d{10}/g)||[];
+        found.forEach(no=>{
+          if(!targets[no])return;
+          const contract=String(item.untyCntrctNo||'');
+          const unique=category+'|'+contract+'|'+no;
+          if(seen[unique])return;
+          seen[unique]=true;
+          output.push([day,category,no,targets[no].name,targets[no].agent,
+            String(item.cntrctNm||''),contract,
+            String(item.totCntrctAmt||''),String(item.cntrctCnclsDate||''),
+            '나라장터 계약업체 번호 일치·미수금 미확인']);
+        });
       });
-    });
+      if(processed>=total)break;
+    }
+    diagnostics.push([new Date(),category,http,code,total,pages,processed]);
   });
   const dest=ss.getSheetByName('나라장터_계약매칭_시험')||ss.insertSheet('나라장터_계약매칭_시험');
   dest.clearContents();
   dest.getRange(1,1,output.length,10).setValues(output);
   const diag=ss.getSheetByName('나라장터_계약분야진단')||ss.insertSheet('나라장터_계약분야진단');
-  diag.getRange(1,1,1,5).setValues([['검사시각','분야','HTTP','API코드','조회건수']]);
-  diag.getRange(diag.getLastRow()+1,1,diagnostics.length,5).setValues(diagnostics);
-  return '조회분야 4개 / 사업자번호 일치 '+(output.length-1)+'건 (1일, 분야별 최대 100건)';
+  diag.getRange(1,1,1,7).setValues([['검사시각','분야','HTTP','API코드','전체조회건수','조회페이지수','실제처리건수']]);
+  diag.getRange(diag.getLastRow()+1,1,diagnostics.length,7).setValues(diagnostics);
+  return '4개 분야 / 실제 처리 '+diagnostics.reduce((n,r)=>n+r[6],0)+'건 / 기업번호 일치 '+(output.length-1)+'건';
 }
 
 /** 계약 API의 업체정보 필드 구조만 확인합니다. 실제 값과 인증키는 기록하지 않습니다. */
