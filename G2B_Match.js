@@ -57,3 +57,25 @@ function g2bMatchContracts() {
   diag.getRange(diag.getLastRow()+1,1,diagnostics.length,5).setValues(diagnostics);
   return '조회분야 4개 / 사업자번호 일치 '+(output.length-1)+'건 (1일, 분야별 최대 100건)';
 }
+
+/** 계약 API의 업체정보 필드 구조만 확인합니다. 실제 값과 인증키는 기록하지 않습니다. */
+function g2bInspectContractFields(){
+ const key=PropertiesService.getScriptProperties().getProperty('G2B_API_KEY');
+ if(!key)throw Error('G2B_API_KEY 없음');
+ const day=Utilities.formatDate(new Date(Date.now()-3*86400000),'Asia/Seoul','yyyyMMdd');
+ const base='https://apis.data.go.kr/1230000/ao/CntrctInfoService/getCntrctInfoListThng';
+ const q={ServiceKey:key,numOfRows:1,pageNo:1,type:'json',inqryDiv:1,inqryBgnDt:day+'0000',inqryEndDt:day+'2359'};
+ const url=base+'?'+Object.keys(q).map(k=>k+'='+encodeURIComponent(q[k])).join('&');
+ const res=UrlFetchApp.fetch(url,{muteHttpExceptions:true});
+ let j={};try{j=JSON.parse(res.getContentText())}catch(e){}
+ const body=(j.response||{}).body||{};
+ const items=body.items||{};
+ const entry=Array.isArray(items.item)?items.item[0]:items.item;
+ const keys=entry&&typeof entry==='object'?Object.keys(entry):[];
+ const fields=keys.filter(k=>/corp|biz|brno|reg|cntrct|amt/i.test(k));
+ const ss=SpreadsheetApp.openById('1Why-2qkGKASeMCIhmlPzk6FFmOLkIm_adi9yz_mmeGU');
+ const sh=ss.getSheetByName('나라장터_응답구조진단')||ss.insertSheet('나라장터_응답구조진단');
+ sh.getRange(1,1,1,5).setValues([['검사시각','HTTP','응답구조','필드명(값 제외)','조회일']]);
+ sh.appendRow([new Date(),res.getResponseCode(),Array.isArray(items.item)?'item 배열':typeof items.item,fields.join(', ').slice(0,2000),day]);
+ return '필드명 '+fields.length+'개 확인';
+}
