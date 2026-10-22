@@ -18,3 +18,22 @@ function g2bContractConfigCheck() {
   sh.appendRow([new Date(),status,valid?'공식 문서 기준 파라미터 확정 후 시험조회':'공공데이터포털 계약정보서비스 상세의 요청주소 확인']);
   return status;
 }
+
+function g2bContractProbe() {
+  const key=PropertiesService.getScriptProperties().getProperty('G2B_API_KEY');
+  if(!key) throw Error('G2B_API_KEY missing');
+  const day=Utilities.formatDate(new Date(Date.now()-259200000),'Asia/Seoul','yyyyMMdd');
+  const query={ServiceKey:key,numOfRows:1,pageNo:1,type:'json',inqryDiv:1,inqryBgnDt:day+'0000',inqryEndDt:day+'2359'};
+  const base='https://apis.data.go.kr/1230000/ao/CntrctInfoService/getCntrctInfoListThng';
+  const url=base+'?'+Object.keys(query).map(k=>k+'='+encodeURIComponent(query[k])).join('&');
+  const response=UrlFetchApp.fetch(url,{muteHttpExceptions:true});
+  let data={};try{data=JSON.parse(response.getContentText());}catch(e){}
+  const header=(data.response||{}).header||{};
+  const fault=(data.OpenAPI_ServiceResponse||{}).cmmMsgHeader||{};
+  const code=String(header.resultCode!=null?header.resultCode:fault.returnReasonCode||'unknown');
+  const status=response.getResponseCode()===200&&(code==='00'||code==='0')?'normal':'check';
+  const ss=SpreadsheetApp.openById('1Why-2qkGKASeMCIhmlPzk6FFmOLkIm_adi9yz_mmeGU');
+  const sh=ss.getSheetByName('나라장터_계약조회진단')||ss.insertSheet('나라장터_계약조회진단');
+  sh.appendRow([new Date(),status,response.getResponseCode(),code,day]);
+  return status;
+}
