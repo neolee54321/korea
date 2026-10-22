@@ -7,8 +7,8 @@
 function g2bContractConfigCheck() {
   const p=PropertiesService.getScriptProperties();
   const key=String(p.getProperty('G2B_API_KEY')||'').trim();
-  const url=String(p.getProperty('G2B_CONTRACT_ENDPOINT')||'').trim();
-  const valid=/^https:\/\/apis\.data\.go\.kr\//.test(url);
+  const url=String(p.getProperty('G2B_CONTRACT_ENDPOINT')||'https://apis.data.go.kr/1230000/ao/CntrctInfoService').trim();
+  const valid=url==='https://apis.data.go.kr/1230000/ao/CntrctInfoService';
   const status=!key?'인증키 미설정':!url?'계약정보 요청주소 미설정':!valid?'요청주소 확인 필요':'설정 준비 완료(조회 미실행)';
   const ss=SpreadsheetApp.openById('1Why-2qkGKASeMCIhmlPzk6FFmOLkIm_adi9yz_mmeGU');
   const name='나라장터_계약정보진단';
