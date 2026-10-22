@@ -79,3 +79,24 @@ function g2bInspectContractFields(){
  sh.appendRow([new Date(),res.getResponseCode(),Array.isArray(items.item)?'item 배열':typeof items.item,fields.join(', ').slice(0,2000),day]);
  return '필드명 '+fields.length+'개 확인';
 }
+
+/** 응답값을 공개하지 않고 JSON 계층 구조와 건수만 기록하는 보조 진단 */
+function g2bInspectContractEnvelope(){
+ const key=PropertiesService.getScriptProperties().getProperty('G2B_API_KEY');
+ if(!key)throw Error('G2B_API_KEY 없음');
+ const day=Utilities.formatDate(new Date(Date.now()-3*86400000),'Asia/Seoul','yyyyMMdd');
+ const q={ServiceKey:key,numOfRows:1,pageNo:1,type:'json',inqryDiv:1,inqryBgnDt:day+'0000',inqryEndDt:day+'2359'};
+ const base='https://apis.data.go.kr/1230000/ao/CntrctInfoService/getCntrctInfoListThng';
+ const url=base+'?'+Object.keys(q).map(k=>k+'='+encodeURIComponent(q[k])).join('&');
+ const res=UrlFetchApp.fetch(url,{muteHttpExceptions:true});
+ let data={};try{data=JSON.parse(res.getContentText())}catch(e){}
+ const shape=x=>x&&typeof x==='object'?Object.keys(x).join(', '):typeof x;
+ const response=data.response||{};
+ const body=response.body||{};
+ const items=body.items||{};
+ const ss=SpreadsheetApp.openById('1Why-2qkGKASeMCIhmlPzk6FFmOLkIm_adi9yz_mmeGU');
+ const sh=ss.getSheetByName('나라장터_응답계층진단')||ss.insertSheet('나라장터_응답계층진단');
+ sh.getRange(1,1,1,8).setValues([['검사시각','HTTP','최상위키','response키','body키','items구조','totalCount','resultCode']]);
+ sh.appendRow([new Date(),res.getResponseCode(),shape(data),shape(response),shape(body),shape(items),String(body.totalCount||''),String((response.header||{}).resultCode||'')]);
+ return '응답 계층 기록 완료';
+}
