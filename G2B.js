@@ -1,12 +1,12 @@
 /**
  * 나라장터 연결 진단. 기존 TOP10 및 야간분석 트리거를 변경하지 않습니다.
- * 최초에는 API 인증·응답 구조만 검사합니다. 기업 조회/계약 집계는 하지 않습니다.
+ * 진단용 공개 예시 사업자번호로 응답 구조만 검사합니다. 사용자 기업 DB는 조회하지 않습니다.\n * getUnptRsttCorpInfo02는 일반 기업정보가 아니라 부정당업자 제재정보 조회입니다.
  */
 function g2bConnectionTest() {
   const key=String(PropertiesService.getScriptProperties().getProperty('G2B_API_KEY')||'').trim();
   if(!key) throw Error('스크립트 속성 G2B_API_KEY가 없습니다.');
   const url='https://apis.data.go.kr/1230000/ao/UsrInfoService02/getUnptRsttCorpInfo02'
-    +'?serviceKey='+encodeURIComponent(key)+'&pageNo=1&numOfRows=1&type=json';
+    +'?serviceKey='+encodeURIComponent(key)+'&pageNo=1&numOfRows=1&inqryDiv=1&bizno=1248100998&type=json';
   const response=UrlFetchApp.fetch(url,{muteHttpExceptions:true,followRedirects:true});
   const http=response.getResponseCode();
   const body=response.getContentText();
