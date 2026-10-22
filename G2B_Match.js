@@ -33,8 +33,8 @@ function g2bMatchContracts() {
     const code=String(h.resultCode==null?'미확인':h.resultCode);
     diagnostics.push([new Date(),category,res.getResponseCode(),code,body.totalCount||0]);
     if(res.getResponseCode()!==200||!['0','00'].includes(code))return;
-    let items=body.items&&body.items.item||[];
-    if(!Array.isArray(items))items=[items];
+    let items=Array.isArray(body.items)?body.items:(body.items&&body.items.item)||[];
+    if(!Array.isArray(items))items=items?[items]:[];
     items.forEach(item=>{
       const list=String(item.corpList||'');
       const found=list.match(/\d{10}/g)||[];
@@ -70,13 +70,13 @@ function g2bInspectContractFields(){
  let j={};try{j=JSON.parse(res.getContentText())}catch(e){}
  const body=(j.response||{}).body||{};
  const items=body.items||{};
- const entry=Array.isArray(items.item)?items.item[0]:items.item;
+ const entry=Array.isArray(items)?items[0]:(Array.isArray(items.item)?items.item[0]:items.item);
  const keys=entry&&typeof entry==='object'?Object.keys(entry):[];
  const fields=keys.filter(k=>/corp|biz|brno|reg|cntrct|amt/i.test(k));
  const ss=SpreadsheetApp.openById('1Why-2qkGKASeMCIhmlPzk6FFmOLkIm_adi9yz_mmeGU');
  const sh=ss.getSheetByName('나라장터_응답구조진단')||ss.insertSheet('나라장터_응답구조진단');
  sh.getRange(1,1,1,5).setValues([['검사시각','HTTP','응답구조','필드명(값 제외)','조회일']]);
- sh.appendRow([new Date(),res.getResponseCode(),Array.isArray(items.item)?'item 배열':typeof items.item,fields.join(', ').slice(0,2000),day]);
+ sh.appendRow([new Date(),res.getResponseCode(),Array.isArray(items)?'items 배열':Array.isArray(items.item)?'item 배열':typeof items.item,fields.join(', ').slice(0,2000),day]);
  return '필드명 '+fields.length+'개 확인';
 }
 
