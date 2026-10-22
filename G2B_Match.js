@@ -100,3 +100,34 @@ function g2bInspectContractEnvelope(){
  sh.appendRow([new Date(),res.getResponseCode(),shape(data),shape(response),shape(body),shape(items),String(body.totalCount||''),String((response.header||{}).resultCode||'')]);
  return '응답 계층 기록 완료';
 }
+
+/** 매칭 불일치 원인 진단: 개인정보/사업자번호 원문을 저장하지 않습니다. */
+function g2bDiagnoseMatchingKeys(){
+ const ss=SpreadsheetApp.openById('1Why-2qkGKASeMCIhmlPzk6FFmOLkIm_adi9yz_mmeGU');
+ const source=ss.getSheetByName('대량분석_관리사배분');
+ const rows=source.getDataRange().getDisplayValues();
+ const headers=rows[0]||[];
+ const counts=headers.map((h,i)=>[i+1,h,rows.slice(1).filter(r=>String(r[i]||'').replace(/\D/g,'').length===10).length]);
+ const key=PropertiesService.getScriptProperties().getProperty('G2B_API_KEY');
+ if(!key)throw Error('G2B_API_KEY 없음');
+ const day=Utilities.formatDate(new Date(Date.now()-3*86400000),'Asia/Seoul','yyyyMMdd');
+ const q={ServiceKey:key,numOfRows:10,pageNo:1,type:'json',inqryDiv:1,inqryBgnDt:day+'0000',inqryEndDt:day+'2359'};
+ const url='https://apis.data.go.kr/1230000/ao/CntrctInfoService/getCntrctInfoListThng?'+Object.keys(q).map(k=>k+'='+encodeURIComponent(q[k])).join('&');
+ const res=UrlFetchApp.fetch(url,{muteHttpExceptions:true});
+ const data=JSON.parse(res.getContentText());
+ const body=(data.response||{}).body||{};
+ const items=Array.isArray(body.items)?body.items:[];
+ const details=items.slice(0,10).map(x=>{
+   const v=x.corpList;
+   const raw=typeof v==='string'?v:JSON.stringify(v||'');
+   return [typeof v,Array.isArray(v)?'array':v&&typeof v==='object'?'object':'text',raw.length,(raw.match(/\d{10}/g)||[]).length,(raw.match(/\d{3}-\d{2}-\d{5}/g)||[]).length];
+ });
+ const sh=ss.getSheetByName('나라장터_매칭키진단')||ss.insertSheet('나라장터_매칭키진단');
+ sh.clearContents();
+ sh.getRange(1,1,1,3).setValues([['원본 열번호','원본 열제목','10자리 번호형식 셀 수']]);
+ if(counts.length)sh.getRange(2,1,counts.length,3).setValues(counts);
+ const start=counts.length+4;
+ sh.getRange(start,1,1,5).setValues([['corpList 자료형','구조','문자수','연속 10자리 수','하이픈 포함 번호 수']]);
+ if(details.length)sh.getRange(start+1,1,details.length,5).setValues(details);
+ return '원본 열 '+counts.length+'개, 계약 표본 '+details.length+'건 진단 완료';
+}
