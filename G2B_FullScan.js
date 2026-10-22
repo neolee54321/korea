@@ -102,3 +102,26 @@ function g2bFullScanStatus(){
  const raw=PropertiesService.getScriptProperties().getProperty('G2B_FULLSCAN_STATE');
  return raw?JSON.parse(raw):'시작 전';
 }
+
+/** 오류로 일시중지된 작업을 기존 페이지부터 다시 시작합니다. */
+function g2bResumeFullScan(){
+ const props=PropertiesService.getScriptProperties();
+ const raw=props.getProperty('G2B_FULLSCAN_STATE');
+ if(!raw)throw Error('시작된 작업이 없습니다');
+ const state=JSON.parse(raw);
+ if(state.status==='complete')return '이미 완료';
+ if(state.status==='running')return '이미 실행 중';
+ state.status='running';delete state.error;
+ props.setProperty('G2B_FULLSCAN_STATE',JSON.stringify(state));
+ ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()==='g2bFullScanBatch').forEach(t=>ScriptApp.deleteTrigger(t));
+ ScriptApp.newTrigger('g2bFullScanBatch').timeBased().everyMinutes(10).create();
+ return '이어서 실행 예약 완료';
+}
+/** 자동 실행을 중단하되 현재 진행 위치는 보존합니다. */
+function g2bPauseFullScan(){
+ const props=PropertiesService.getScriptProperties();
+ const raw=props.getProperty('G2B_FULLSCAN_STATE');
+ if(raw){const state=JSON.parse(raw);if(state.status==='running'){state.status='paused';props.setProperty('G2B_FULLSCAN_STATE',JSON.stringify(state))}}
+ ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()==='g2bFullScanBatch').forEach(t=>ScriptApp.deleteTrigger(t));
+ return '중지 완료 (진행 위치 보존)';
+}
