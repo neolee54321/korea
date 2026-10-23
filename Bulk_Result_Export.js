@@ -66,6 +66,10 @@ function bulkFinalizeIfReady() {
   }
   const g=dailyG2BStatus();
   if(!g||g==='미시작'||g.run!==run||g.status!=='complete')return {run,created:false,reason:'나라장터 검증 완료 대기'};
+  const history=ss.getSheetByName('일일_분석이력');
+  if(!history||history.getLastRow()<2)return {run,created:false,reason:'분석이력 작성 대기'};
+  const ids=history.getRange(2,1,history.getLastRow()-1,1).getDisplayValues();
+  if(!ids.some(r=>r[0]===run))return {run,created:false,reason:'해당 실행ID 결과 취합 대기'};
   const result=bulkCreateResultSheet();
   console.log(JSON.stringify(result));return result;
 }
