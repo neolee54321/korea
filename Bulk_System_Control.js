@@ -112,3 +112,14 @@ function bulkMonitorInstall() {
   if(!existing.length)ScriptApp.newTrigger(fn).timeBased().everyMinutes(30).create();
   return bulkMonitorTick();
 }
+
+function bulkInputWaitingStatus(){
+ const p=PropertiesService.getScriptProperties(),snap=dailySnapshot_();
+ const fresh=p.getProperty('DAILY_INPUT_HASH')!==snap.hash;
+ const busy=p.getProperty('NIGHT_ACTIVE')==='1'||p.getProperty('NIGHT_NTS_ACTIVE')==='1';
+ const state=!fresh?'신규 입력 없음':busy?'신규 입력 대기':'신규 입력 준비';
+ const ss=SpreadsheetApp.openById(NIGHT.ssid);
+ const s=ss.getSheetByName('대량분석_입력대기현황')||ss.insertSheet('대량분석_입력대기현황');
+ s.getRange(1,1,2,5).setValues([['확인시각','입력건수','신규자료','기존분석중','상태'],[new Date(),snap.rows.length,fresh?'예':'아니오',busy?'예':'아니오',state]]);
+ return {count:snap.rows.length,state};
+}
