@@ -64,6 +64,8 @@ function bulkFinalizeIfReady() {
     const result={run,created:false,status,reason:'분석 미종료: 결과표 자동 생성 보류'};
     console.log(JSON.stringify(result));return result;
   }
+  const g=dailyG2BStatus();
+  if(!g||g==='미시작'||g.run!==run||g.status!=='complete')return {run,created:false,reason:'나라장터 검증 완료 대기'};
   const result=bulkCreateResultSheet();
   console.log(JSON.stringify(result));return result;
 }
