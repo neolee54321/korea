@@ -158,3 +158,28 @@ function bulkArchivePending(){
  if(rows.length)out.getRange(2,1,rows.length,16).setValues(rows);
  return {sheet:name,created:true,rows:rows.length};
 }
+
+/** 승인된 기존 실행을 분리 보관한 후에만 신규 실행 차단을 해제한다. */
+function bulkReleaseArchivedRun(){
+ return nightLock_(()=>{
+  const p=PropertiesService.getScriptProperties();
+  const id=p.getProperty('NIGHT_RUN');
+  if(id!=='20261022-185519')throw Error('승인된 기존 실행ID와 다릅니다.');
+  const ss=SpreadsheetApp.openById(NIGHT.ssid);
+  const saved=ss.getSheetByName('미종료보존_'+id);
+  if(!saved||saved.getLastRow()<2)throw Error('미종료 원본 보존 시트가 없습니다.');
+  const q=ss.getSheetByName(NIGHT.queue);
+  const rows=q.getRange(2,1,q.getLastRow()-1,16).getDisplayValues();
+  const pending=rows.filter(r=>r[0]===id&&!['완료','부분완료','보류','실패'].includes(r[8]));
+  const backup=saved.getRange(2,1,saved.getLastRow()-1,16).getDisplayValues();
+  if(pending.length!==backup.length||pending.some(r=>!backup.some(b=>b[0]===r[0]&&b[1]===r[1]&&b[3]===r[3])))throw Error('미종료 원본과 보존본이 일치하지 않습니다.');
+  if(p.getProperty('NIGHT_NTS_ACTIVE')==='1')throw Error('국세청 조회 실행 중: 전환 중단');
+  const g=dailyG2BStatus();
+  if(g&&g!=='미시작'&&g.status==='running')throw Error('나라장터 조회 실행 중: 전환 중단');
+  p.setProperty('NIGHT_ACTIVE','0');
+  nightClearTick_();
+  p.setProperty('BULK_ARCHIVED_RUN',id);
+  console.log('기존 미종료 원본 보존 확인 / 신규 실행 차단 해제: '+id);
+  return {archivedRun:id,preserved:pending.length,nextRunReady:true};
+ });
+}
