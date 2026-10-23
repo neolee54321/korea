@@ -71,5 +71,26 @@ function bulkFinalizeIfReady() {
   const ids=history.getRange(2,1,history.getLastRow()-1,1).getDisplayValues();
   if(!ids.some(r=>r[0]===run))return {run,created:false,reason:'해당 실행ID 결과 취합 대기'};
   const result=bulkCreateResultSheet();
+  try{result.inputCleanup=bulkClearCompletedInput_(run,Number(row[4]));}
+  catch(e){result.inputCleanup='보존: '+String(e.message||e);}
   console.log(JSON.stringify(result));return result;
+}
+
+/** 완료 결과표와 입력 해시가 일치할 때만 신규입력의 데이터 행을 비운다. */
+function bulkClearCompletedInput_(run,expected){
+ const p=PropertiesService.getScriptProperties();
+ if(p.getProperty('DAILY_RUN')!==run)throw Error('입력 실행ID 불일치');
+ const ss=SpreadsheetApp.openById(NIGHT.ssid);
+ const output=ss.getSheetByName('대량결과_'+run);
+ if(!output||output.getLastRow()-1!==expected)throw Error('최종 결과 건수 불일치');
+ const input=ss.getSheetByName(NIGHT.input);
+ if(!input||input.getLastRow()<2)return '입력란 이미 비어 있음';
+ const snap=dailySnapshot_();
+ if(snap.hash!==p.getProperty('DAILY_INPUT_HASH')||snap.rows.length!==expected)throw Error('입력 변경 감지: 삭제하지 않음');
+ const queue=ss.getSheetByName(NIGHT.queue);
+ const rows=queue.getRange(2,1,queue.getLastRow()-1,16).getDisplayValues().filter(r=>r[0]===run);
+ if(rows.length!==expected||rows.some(r=>!['완료','부분완료','보류','실패'].includes(r[8])))throw Error('대기열 미종료: 삭제하지 않음');
+ input.getRange(2,1,input.getLastRow()-1,7).clearContent();
+ p.setProperty('DAILY_INPUT_CLEARED_RUN',run);
+ return '입력 데이터 삭제 완료 (제목 유지)';
 }
