@@ -18,7 +18,7 @@ function bulkSystemStatus() {
     const values = queue.getRange(2,1,queue.getLastRow()-1,16).getDisplayValues();
     values.forEach(r => {
       if (r[0] !== run) return;
-      const stage = r[15] || '(상태 공란)';
+      const stage = r[8] || '(상태 공란)';
       counts[stage] = (counts[stage] || 0) + 1;
     });
   }
@@ -41,6 +41,30 @@ function bulkSystemStatus() {
       updated:g2b.updated,error:g2b.error||''
     } : '미시작',
     g2bSheetRows:g2bRows
+  };
+  console.log(JSON.stringify(report,null,2));
+  return report;
+}
+
+/** 대기열 미종료 원인 확인. 읽기 전용이며 재시도/완료처리를 하지 않습니다. */
+function bulkPendingCheck() {
+  const ss=SpreadsheetApp.openById(NIGHT.ssid);
+  const control=ss.getSheetByName('야간분석_실행관리');
+  const queue=ss.getSheetByName('야간분석_작업대기열');
+  if(!control||!queue) throw Error('운영 시트 누락');
+  const runs=control.getRange(2,1,control.getLastRow()-1,12).getDisplayValues();
+  const current=runs[runs.length-1],run=current[0];
+  const values=queue.getRange(2,1,queue.getLastRow()-1,16).getDisplayValues();
+  const rows=values.filter(r=>r[0]===run);
+  const terminal=['완료','부분완료','보류','실패'];
+  const pending=rows.filter(r=>!terminal.includes(r[8]));
+  const report={
+    run:run,expected:Number(current[4]),found:rows.length,
+    runStatus:current[9],pendingCount:pending.length,
+    pending:pending.slice(0,30).map(r=>({
+      company:r[2],stage:r[7],status:r[8],attempts:r[9],
+      nextAttempt:r[10],error:r[11]
+    }))
   };
   console.log(JSON.stringify(report,null,2));
   return report;
