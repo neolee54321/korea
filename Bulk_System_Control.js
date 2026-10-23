@@ -103,6 +103,7 @@ function bulkMonitorTick() {
   if(JSON.stringify(prev)!==JSON.stringify(current))monitor.appendRow(record);
   if(ready&&typeof bulkFinalizeIfReady==='function')bulkFinalizeIfReady();
   const report={run,pending:pending.length,status:last[9],g2b:g2bStatus,ready,label};
+  try{bulkInputWaitingStatus();}catch(e){console.error(String(e.message||e));}
   console.log(JSON.stringify(report));return report;
 }
 function bulkMonitorInstall() {
