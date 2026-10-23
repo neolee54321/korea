@@ -51,6 +51,7 @@ function dailyStart(){
   const run=nightStart(); // 이 함수가 입력을 대기열에 복제하므로 이후 입력 변경이 기존 실행에 영향을 주지 않음
   p.setProperties({DAILY_INPUT_HASH:snap.hash,DAILY_RUN:p.getProperty('NIGHT_RUN'),DAILY_DATE:today,DAILY_SIZE:String(snap.rows.length),DAILY_READY:'0'});
   try{nightNtsStart();}catch(e){dailyLog_('국세청시작오류',e.message||e);}
+  try{dailyG2BStart();}catch(e){dailyLog_('나라장터시작오류',String(e.message||e));}
   dailyLog_('시작','입력 '+snap.rows.length+'건 / '+run);
   return run;
  }catch(e){dailyLog_('시작오류',e.message||e);throw e;}
