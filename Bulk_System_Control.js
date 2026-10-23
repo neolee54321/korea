@@ -144,3 +144,17 @@ function bulkNextRunGate(){
  console.log(JSON.stringify(result));
  return result;
 }
+
+/** 기존 미종료 실행의 원본 상태를 별도 시트에 보존한다. 실행상태는 변경하지 않는다. */
+function bulkArchivePending(){
+ const info=bulkPendingCheck(),ss=SpreadsheetApp.openById(NIGHT.ssid);
+ const q=ss.getSheetByName(NIGHT.queue);
+ const all=q.getRange(2,1,q.getLastRow()-1,16).getDisplayValues();
+ const rows=all.filter(r=>r[0]===info.run&&!['완료','부분완료','보류','실패'].includes(r[8]));
+ const name='미종료보존_'+info.run;
+ if(ss.getSheetByName(name))return {sheet:name,created:false,rows:rows.length};
+ const out=ss.insertSheet(name);
+ out.getRange(1,1,1,16).setValues([q.getRange(1,1,1,16).getDisplayValues()[0]]);
+ if(rows.length)out.getRange(2,1,rows.length,16).setValues(rows);
+ return {sheet:name,created:true,rows:rows.length};
+}
