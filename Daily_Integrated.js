@@ -105,6 +105,6 @@ function dailyFinalize(){
  try{const g=dailyG2BStatus();if(g&&g.status==='complete'&&g.run===run)dailyG2BApply();}catch(e){dailyLog_('나라장터반영오류',String(e.message||e));}
  if(complete){try{bulkFinalizeIfReady();}catch(e){dailyLog_('결과표오류',String(e.message||e));}}
  dailyLog_('결과',run+' / '+result.length+'건 / DART 대기 '+pending+' / 국세청 대기 '+taxPending+' / '+(complete?'검토용 생성':'미완료'));
- return {run,companies:result.length,dartPending:pending,ntsPending:taxPending,allChecksFinished:complete,procurement:'미연결'};
+ return {run,companies:result.length,dartPending:pending,ntsPending:taxPending,allChecksFinished:complete,procurement:'나라장터 별도 상태 확인'};
 }
 function dailyStatus(){const p=PropertiesService.getScriptProperties();return {run:p.getProperty('DAILY_RUN'),inputDate:p.getProperty('DAILY_DATE'),count:p.getProperty('DAILY_SIZE'),ready:p.getProperty('DAILY_READY')==='1',note:'나라장터 통합은 미연결. 배포 전 확인 필요'};}
