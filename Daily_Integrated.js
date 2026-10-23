@@ -102,6 +102,7 @@ function dailyFinalize(){
   const old=archive.getLastRow()>1?archive.getRange(2,1,archive.getLastRow()-1,1).getDisplayValues().some(x=>x[0]===run):false;
   if(!old){if(archive.getMaxRows()<archive.getLastRow()+result.length)archive.insertRowsAfter(archive.getMaxRows(),archive.getLastRow()+result.length-archive.getMaxRows());archive.getRange(archive.getLastRow()+1,1,result.length,DAILY.headers.length).setValues(result);}
  }
+ if(complete){try{bulkFinalizeIfReady();}catch(e){dailyLog_('결과표오류',String(e.message||e));}}
  dailyLog_('결과',run+' / '+result.length+'건 / DART 대기 '+pending+' / 국세청 대기 '+taxPending+' / '+(complete?'검토용 생성':'미완료'));
  return {run,companies:result.length,dartPending:pending,ntsPending:taxPending,allChecksFinished:complete,procurement:'미연결'};
 }
