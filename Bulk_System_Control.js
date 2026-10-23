@@ -94,7 +94,7 @@ function bulkMonitorTick() {
   const states={};
   rows.forEach(r=>{states[r[8]]=(states[r[8]]||0)+1;});
   const ready=rows.length===total&&pending.length===0&&last[9]==='완료';
-  const label=ready?'결과표 생성 가능':pending.length?'미종료 '+pending.length+'건 - 상태 확인 필요':'실행 종료 판정 대기';
+  const label=ready?'결과표 생성 가능':pending.some(r=>r[8]==='진행중')?'진행중 상태 확인 필요 - 자동 재처리 안 함':pending.length?'미종료 '+pending.length+'건 - 상태 확인 필요':'실행 종료 판정 대기';
   const stamp=Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm:ss');
   const record=[stamp,run,total,rows.length,states['완료']||0,states['부분완료']||0,states['보류']||0,states['실패']||0,pending.length,last[9],g2bStatus,label];
   const lastRow=monitor.getLastRow();
