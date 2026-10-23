@@ -133,3 +133,14 @@ function bulkDryRun(){
  const g=dailyG2BStatus();
  return {inputCount:snap.rows.length,newInput:fresh,priorRunBusy:busy,procurement:g==='미시작'?'미시작':g.status,canStart:fresh&&!busy,mode:'읽기전용 - 분석 시작 안 함'};
 }
+
+/** 기존 실행을 변경하지 않는 신규 실행 차단 원인 진단. */
+function bulkNextRunGate(){
+ const p=PropertiesService.getScriptProperties();
+ const status=bulkPendingCheck();
+ const active=p.getProperty('NIGHT_ACTIVE')==='1';
+ const blocked=active||status.pendingCount>0;
+ const result={priorRun:status.run,unfinished:status.pendingCount,active,canStartNext:!blocked,action:blocked?'기존 실행 별도 검토 필요':'신규 실행 가능'};
+ console.log(JSON.stringify(result));
+ return result;
+}
