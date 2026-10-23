@@ -7,7 +7,7 @@
  */
 const DAILY_G2B={sheet:'일일_나라장터매칭',state:'DAILY_G2B_STATE',fn:'dailyG2BTick',batch:6,
  ops:[['물품','getCntrctInfoListThng'],['공사','getCntrctInfoListCnstwk'],['용역','getCntrctInfoListServc'],['외자','getCntrctInfoListFrgcpt']]};
-function dailyG2BStatus(){const s=PropertiesService.getScriptProperties().getProperty(DAILY_G2B.state);return s?JSON.parse(s):'미시작';}
+function dailyG2BStatus(){const s=PropertiesService.getScriptProperties().getProperty(DAILY_G2B.state);const state=s?JSON.parse(s):'미시작';console.log(JSON.stringify(state));return state;}
 function dailyG2BStart(from,to){
  // Apps Script 함수 메뉴에서 인수 없이 실행하면 전날(한국시간) 계약정보를 조회합니다.
  // 날짜를 명시한 호출은 그대로 지원합니다.
@@ -83,9 +83,9 @@ function dailyG2BApply(){
  names.forEach(name=>{
   const sh=ss.getSheetByName(name);if(!sh||sh.getLastRow()<2)return;
   const data=sh.getRange(2,1,sh.getLastRow()-1,12).getDisplayValues();
-  const changes=[];
-  data.forEach((r,i)=>{if(r[0]!==state.run)return;const hits=count.get(String(r[4]).replace(/\D/g,''))||0;changes.push({row:i+2,text:hits?'계약번호 일치 '+hits+'건 (미수채권 미확인)':'해당 조회기간 계약 일치 없음 (미수채권 미확인)'});});
-  changes.forEach(c=>sh.getRange(c.row,9).setValue(c.text));updated+=changes.length;
+  const current=sh.getRange(2,9,data.length,1).getValues();
+  data.forEach((r,i)=>{if(r[0]!==state.run)return;const hits=count.get(String(r[4]).replace(/\D/g,''))||0;current[i][0]=hits?'계약번호 일치 '+hits+'건 (미수채권 미확인)':'해당 조회기간 계약 일치 없음 (미수채권 미확인)';updated++;});
+  sh.getRange(2,9,current.length,1).setValues(current);
  });
  dailyLog_('나라장터','실행 '+state.run+' / '+state.from+'~'+state.to+' / 계약 '+state.processed+'건 검색 / 일치 '+state.matches+'건 / 결과행 '+updated+'개 반영');
  return {run:state.run,matchedContracts:state.matches,rowsUpdated:updated,coverage:state.from+'~'+state.to};
