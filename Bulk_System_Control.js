@@ -139,8 +139,14 @@ function bulkNextRunGate(){
  const p=PropertiesService.getScriptProperties();
  const status=bulkPendingCheck();
  const active=p.getProperty('NIGHT_ACTIVE')==='1';
- const blocked=active||status.pendingCount>0;
- const result={priorRun:status.run,unfinished:status.pendingCount,active,canStartNext:!blocked,action:blocked?'기존 실행 별도 검토 필요':'신규 실행 가능'};
+ const ss=SpreadsheetApp.openById(NIGHT.ssid);
+ const archive=ss.getSheetByName('미종료보존_'+status.run);
+ const saved=archive&&archive.getLastRow()>1&&p.getProperty('BULK_ARCHIVED_RUN')===status.run;
+ const ntsActive=p.getProperty('NIGHT_NTS_ACTIVE')==='1';
+ const g=dailyG2BStatus();
+ const g2bActive=!!(g&&g!=='미시작'&&g.status==='running');
+ const blocked=active||ntsActive||g2bActive||(status.pendingCount>0&&!saved);
+ const result={priorRun:status.run,unfinished:status.pendingCount,archived:!!saved,active,ntsActive,g2bActive,canStartNext:!blocked,action:blocked?'실행 상태 또는 보존본 확인 필요':'신규 입력 시 실행 가능'};
  console.log(JSON.stringify(result));
  return result;
 }
