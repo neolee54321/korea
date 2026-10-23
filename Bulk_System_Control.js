@@ -123,3 +123,13 @@ function bulkInputWaitingStatus(){
  s.getRange(1,1,2,5).setValues([['확인시각','입력건수','신규자료','기존분석중','상태'],[new Date(),snap.rows.length,fresh?'예':'아니오',busy?'예':'아니오',state]]);
  return {count:snap.rows.length,state};
 }
+
+/** 자동분석을 시작하지 않는 사전 점검. */
+function bulkDryRun(){
+ const snap=dailySnapshot_();
+ const p=PropertiesService.getScriptProperties();
+ const busy=p.getProperty('NIGHT_ACTIVE')==='1'||p.getProperty('NIGHT_NTS_ACTIVE')==='1';
+ const fresh=p.getProperty('DAILY_INPUT_HASH')!==snap.hash;
+ const g=dailyG2BStatus();
+ return {inputCount:snap.rows.length,newInput:fresh,priorRunBusy:busy,procurement:g==='미시작'?'미시작':g.status,canStart:fresh&&!busy,mode:'읽기전용 - 분석 시작 안 함'};
+}
