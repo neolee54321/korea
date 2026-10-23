@@ -107,4 +107,4 @@ function dailyFinalize(){
  dailyLog_('결과',run+' / '+result.length+'건 / DART 대기 '+pending+' / 국세청 대기 '+taxPending+' / '+(complete?'검토용 생성':'미완료'));
  return {run,companies:result.length,dartPending:pending,ntsPending:taxPending,allChecksFinished:complete,procurement:'나라장터 별도 상태 확인'};
 }
-function dailyStatus(){const p=PropertiesService.getScriptProperties();return {run:p.getProperty('DAILY_RUN'),inputDate:p.getProperty('DAILY_DATE'),count:p.getProperty('DAILY_SIZE'),ready:p.getProperty('DAILY_READY')==='1',note:'나라장터 통합은 미연결. 배포 전 확인 필요'};}
+function dailyStatus(){const p=PropertiesService.getScriptProperties();return {run:p.getProperty('DAILY_RUN'),inputDate:p.getProperty('DAILY_DATE'),count:p.getProperty('DAILY_SIZE'),ready:p.getProperty('DAILY_READY')==='1',note:'나라장터 조회 상태는 dailyG2BStatus에서 확인. 계약 일치는 미수채권 확인이 아님'};}
