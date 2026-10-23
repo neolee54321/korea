@@ -9,6 +9,13 @@ const DAILY_G2B={sheet:'일일_나라장터매칭',state:'DAILY_G2B_STATE',fn:'d
  ops:[['물품','getCntrctInfoListThng'],['공사','getCntrctInfoListCnstwk'],['용역','getCntrctInfoListServc'],['외자','getCntrctInfoListFrgcpt']]};
 function dailyG2BStatus(){const s=PropertiesService.getScriptProperties().getProperty(DAILY_G2B.state);return s?JSON.parse(s):'미시작';}
 function dailyG2BStart(from,to){
+ // Apps Script 함수 메뉴에서 인수 없이 실행하면 전날(한국시간) 계약정보를 조회합니다.
+ // 날짜를 명시한 호출은 그대로 지원합니다.
+ if(from===undefined&&to===undefined){
+  const yesterday=new Date(Date.now()-86400000);
+  const day=Utilities.formatDate(yesterday,'Asia/Seoul','yyyyMMdd');
+  from=day;to=day;
+ }
  const p=PropertiesService.getScriptProperties(),run=p.getProperty('DAILY_RUN');
  if(!run)throw Error('DAILY_RUN 없음');
  if(!p.getProperty('G2B_API_KEY'))throw Error('G2B_API_KEY 없음: Apps Script 스크립트 속성에 설정 필요');
