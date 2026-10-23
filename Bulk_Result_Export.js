@@ -46,3 +46,24 @@ function bulkCreateResultSheet() {
     throw e;
   }
 }
+
+/**
+ * 안전한 후속 처리 진입점.
+ * 분석 실행관리 상태가 '완료'인 경우에만 결과표를 생성합니다.
+ * 진행 중·오류·보류 상태에서는 어떤 원본 데이터도 변경하지 않습니다.
+ * 함수: bulkFinalizeIfReady()
+ */
+function bulkFinalizeIfReady() {
+  const ss=SpreadsheetApp.openById(NIGHT.ssid);
+  const sh=ss.getSheetByName('야간분석_실행관리');
+  if(!sh || sh.getLastRow()<2) throw Error('실행관리 시트 없음');
+  const records=sh.getRange(2,1,sh.getLastRow()-1,12).getDisplayValues();
+  const row=records[records.length-1];
+  const run=row[0], status=String(row[9]||'').trim();
+  if(status!=='완료') {
+    const result={run,created:false,status,reason:'분석 미종료: 결과표 자동 생성 보류'};
+    console.log(JSON.stringify(result));return result;
+  }
+  const result=bulkCreateResultSheet();
+  console.log(JSON.stringify(result));return result;
+}
