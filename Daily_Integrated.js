@@ -44,6 +44,9 @@ function dailyInstall(){
 function dailyStart(){
  const p=PropertiesService.getScriptProperties();
  try{
+  const inputSheet=SpreadsheetApp.openById(NIGHT.ssid).getSheetByName(DAILY.input);
+  if(!inputSheet)throw Error('대량분석_신규입력 없음');
+  if(inputSheet.getLastRow()<2 || !inputSheet.getRange(2,2,inputSheet.getLastRow()-1,1).getDisplayValues().some(r=>String(r[0]).trim()))return '입력 없음: 예약 실행 건너뜀';
   const snap=dailySnapshot_();
   const today=Utilities.formatDate(new Date(),'Asia/Seoul','yyyyMMdd');
   if(p.getProperty('DAILY_INPUT_HASH')===snap.hash){dailyLog_('시작건너뜀','이전 입력과 동일: 새로운 업로드 미확인');return '입력 내용 변경 없음: 실행하지 않음';}
@@ -100,6 +103,10 @@ function dailyFinalize(){
  if(complete){
   const archive=dailyTab_(DAILY.archive,DAILY.headers);
   const old=archive.getLastRow()>1?archive.getRange(2,1,archive.getLastRow()-1,1).getDisplayValues().some(x=>x[0]===run):false;
+  if(old){
+   const saved=archive.getRange(2,1,archive.getLastRow()-1,1).getDisplayValues().filter(x=>x[0]===run).length;
+   if(saved!==result.length)throw Error('기존 분석이력 건수 불일치: 자동 덮어쓰기 중단 '+saved+'/'+result.length);
+  }
   if(!old){if(archive.getMaxRows()<archive.getLastRow()+result.length)archive.insertRowsAfter(archive.getMaxRows(),archive.getLastRow()+result.length-archive.getMaxRows());archive.getRange(archive.getLastRow()+1,1,result.length,DAILY.headers.length).setValues(result);}
  }
  try{const g=dailyG2BStatus();if(g&&g.status==='complete'&&g.run===run)dailyG2BApply();}catch(e){dailyLog_('나라장터반영오류',String(e.message||e));}
