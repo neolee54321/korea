@@ -69,7 +69,8 @@ function bulkFinalizeIfReady() {
   const history=ss.getSheetByName('일일_분석이력');
   if(!history||history.getLastRow()<2)return {run,created:false,reason:'분석이력 작성 대기'};
   const ids=history.getRange(2,1,history.getLastRow()-1,1).getDisplayValues();
-  if(!ids.some(r=>r[0]===run))return {run,created:false,reason:'해당 실행ID 결과 취합 대기'};
+  const archivedCount=ids.filter(r=>r[0]===run).length;
+  if(archivedCount!==Number(row[4]))return {run,created:false,reason:'분석이력 건수 불일치: '+archivedCount+'/'+row[4]};
   const result=bulkCreateResultSheet();
   try{result.inputCleanup=bulkClearCompletedInput_(run,Number(row[4]));}
   catch(e){result.inputCleanup='보존: '+String(e.message||e);}
