@@ -101,7 +101,16 @@ function bulkMonitorTick() {
   const prev=lastRow>1?monitor.getRange(lastRow,2,1,11).getDisplayValues()[0]:[];
   const current=record.slice(1).map(String);
   if(JSON.stringify(prev)!==JSON.stringify(current))monitor.appendRow(record);
-  if(ready&&typeof bulkFinalizeIfReady==='function')bulkFinalizeIfReady();
+  if(ready){
+    const archive=ss.getSheetByName('일일_분석이력');
+    const archived=archive&&archive.getLastRow()>1?archive.getRange(2,1,archive.getLastRow()-1,1).getDisplayValues().filter(r=>r[0]===run).length:0;
+    if(archived!==total && typeof dailyFinalize==='function'){
+      try{dailyFinalize();}catch(e){console.error('자동 결과 취합 보류: '+String(e.message||e));}
+    }
+    if(typeof bulkFinalizeIfReady==='function'){
+      try{bulkFinalizeIfReady();}catch(e){console.error('자동 결과표 생성 보류: '+String(e.message||e));}
+    }
+  }
   const report={run,pending:pending.length,status:last[9],g2b:g2bStatus,ready,label};
   try{bulkInputWaitingStatus();}catch(e){console.error(String(e.message||e));}
   console.log(JSON.stringify(report));return report;
@@ -114,7 +123,16 @@ function bulkMonitorInstall() {
 }
 
 function bulkInputWaitingStatus(){
- const p=PropertiesService.getScriptProperties(),snap=dailySnapshot_();
+ const p=PropertiesService.getScriptProperties();
+ const input=SpreadsheetApp.openById(NIGHT.ssid).getSheetByName(NIGHT.input);
+ if(!input)throw Error('신규입력 시트 없음');
+ if(input.getLastRow()<2 || !input.getRange(2,2,input.getLastRow()-1,1).getDisplayValues().some(r=>String(r[0]).trim())){
+  const ss=SpreadsheetApp.openById(NIGHT.ssid);
+  const s=ss.getSheetByName('대량분석_입력대기현황')||ss.insertSheet('대량분석_입력대기현황');
+  s.getRange(1,1,2,5).setValues([['확인시각','입력건수','신규자료','기존분석중','상태'],[new Date(),0,'아니오','아니오','입력 대기']]);
+  return {count:0,state:'입력 대기'};
+ }
+ const snap=dailySnapshot_();
  const fresh=p.getProperty('DAILY_INPUT_HASH')!==snap.hash;
  const busy=p.getProperty('NIGHT_ACTIVE')==='1'||p.getProperty('NIGHT_NTS_ACTIVE')==='1';
  const state=!fresh?'신규 입력 없음':busy?'신규 입력 대기':'신규 입력 준비';
