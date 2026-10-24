@@ -51,6 +51,11 @@ function dailyStart(){
   const today=Utilities.formatDate(new Date(),'Asia/Seoul','yyyyMMdd');
   if(p.getProperty('DAILY_INPUT_HASH')===snap.hash){dailyLog_('시작건너뜀','이전 입력과 동일: 새로운 업로드 미확인');return '입력 내용 변경 없음: 실행하지 않음';}
   if(p.getProperty('NIGHT_ACTIVE')==='1'||p.getProperty('NIGHT_NTS_ACTIVE')==='1'){dailyLog_('신규입력대기','기존 분석 진행 중: 신규 입력은 보존하고 다음 실행에서 재확인');return '기존 분석 진행 중: 신규 입력 보존, 다음 일정에서 재확인';}
+  const g2b=dailyG2BStatus();
+  if(g2b&&g2b!=='미시작'&&g2b.status==='running'){
+   dailyLog_('신규입력대기','나라장터 조회 진행 중: 신규 입력은 보존');
+   return '나라장터 조회 진행 중: 신규 입력 보존';
+  }
   const run=nightStart(); // 이 함수가 입력을 대기열에 복제하므로 이후 입력 변경이 기존 실행에 영향을 주지 않음
   p.setProperties({DAILY_INPUT_HASH:snap.hash,DAILY_RUN:p.getProperty('NIGHT_RUN'),DAILY_DATE:today,DAILY_SIZE:String(snap.rows.length),DAILY_READY:'0'});
   try{nightNtsStart();}catch(e){dailyLog_('국세청시작오류',e.message||e);}
