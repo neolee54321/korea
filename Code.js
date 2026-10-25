@@ -471,3 +471,26 @@ function nightNtsTick(){
   return '국세청 '+valid.length+'건 조회 완료';
  });
 }
+
+
+/** 읽기 전용 DART 개선효과 시험. 기존 대기열·결과표·실행상태는 변경하지 않습니다. */
+function nightFinancePilot5(){
+ const cases=[
+  {name:'(주)주연테크',corp:'00269241'},
+  {name:'(주)다이나믹디자인',corp:'00453488'},
+  {name:'(주)형지엘리트',corp:'00441243'},
+  {name:'(주)비비안',corp:'00107677'},
+  {name:'대영포장(주)',corp:'00111458'}
+ ];
+ const results=[];
+ for(const item of cases){
+  try{
+   const pair=nightFinancePair_(item.corp,2024,2025);
+   const a=pair.prior,b=pair.current;
+   const complete=!!a.basis&&a.basis===b.basis&&[a.revenue,a.receivable,b.revenue,b.receivable].every(x=>x!==null);
+   results.push({name:item.name,corp:item.corp,status:complete?'완료 가능':'부분완료 유지',basis:a.basis===b.basis?a.basis:'기준 불일치',priorRevenue:a.revenue,priorReceivable:a.receivable,currentRevenue:b.revenue,currentReceivable:b.receivable,receivableType:a.receivableKind||''});
+  }catch(e){results.push({name:item.name,status:'조회 오류',reason:String(e.message||e)});}
+ }
+ console.log(JSON.stringify(results));
+ return results;
+}
