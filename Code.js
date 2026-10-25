@@ -527,3 +527,29 @@ function nightFinanceRecheck64(){
  const summary={run,total:targets.length,processed:allDone,remaining:targets.length-allDone,nextAction:allDone<targets.length?'nightFinanceRecheck64 다시 실행':'재검증 완료',resultSheet:output};
  console.log(JSON.stringify(summary));return summary;
 }
+
+
+/** 재검증 전용 자동 실행: 10분 간격, 완료 시 트리거 자동 제거. */
+function nightFinanceRecheckAutoStart(){
+ const fn='nightFinanceRecheckAutoTick';
+ const triggers=ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===fn);
+ if(!triggers.length)ScriptApp.newTrigger(fn).timeBased().everyMinutes(10).create();
+ return nightFinanceRecheckAutoTick();
+}
+function nightFinanceRecheckAutoTick(){
+ const fn='nightFinanceRecheckAutoTick',lock=LockService.getScriptLock();
+ if(!lock.tryLock(1000))return '다른 재검증 실행 중: 이번 회차 건너뜀';
+ try{
+  const state=nightFinanceRecheck64();
+  if(state.remaining===0){
+   ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===fn).forEach(t=>ScriptApp.deleteTrigger(t));
+   return '재검증 64건 처리 종료: '+state.resultSheet;
+  }
+  return '재검증 '+state.processed+'/64건, 남음 '+state.remaining+'건';
+ }finally{lock.releaseLock();}
+}
+function nightFinanceRecheckAutoStop(){
+ const fn='nightFinanceRecheckAutoTick';
+ ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===fn).forEach(t=>ScriptApp.deleteTrigger(t));
+ return '재검증 자동 실행 중지 (기존 결과 보존)';
+}
