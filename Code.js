@@ -217,7 +217,7 @@ if(!verified.ok){
   const reason=verified.reason;
   return {corpCode:corp.code,status:'보류',signal:'미검증',level:'보류',evidence:reason,result:[name,reg,phone,address,corp.code,'DART 사업자번호 대조 불일치 또는 미확인','','','','보류','재무 분석 보류',reason,date+' / DART 기업개황']};
 }
-const y25=nightFinance_(corp.code,2025);const y24=nightFinance_(corp.code,2024);const basis=y25.basis&&y24.basis&&y25.basis===y24.basis?y25.basis:(y25.basis||y24.basis||'');const comparable=!!y25.basis&&y25.basis===y24.basis;const fmt=(f,y)=>y+' 매출 '+nightWon_(f.revenue)+', 매출채권 '+nightWon_(f.receivable);const changes=fmt(y24,2024)+' / '+fmt(y25,2025);const enough=comparable&&y25.revenue!==null&&y24.revenue!==null&&y25.receivable!==null&&y24.receivable!==null;const status=enough?'완료':'부분완료';const signal=!comparable?'연도별 재무제표 기준 불일치 또는 누락':!enough?'재무항목 누락: 추가 확인 필요':y25.receivable>y24.receivable?'매출채권 증가 (연체 여부 미확인)':'재무검토 필요';const note='연체·손실충당금 주석 미검증: 숫자 추정 금지';const evidence='DART '+corp.code+' / '+basis+' / 2024·2025 사업보고서 재무제표 / 금액 원';return {corpCode:corp.code,status,signal,level:status,evidence,result:[name,reg,phone,address,corp.code,'DART 기업명 및 사업자번호 일치 / 국세청 영업상태 미검증',basis,changes,note,status,signal,status==='완료'?'':(!comparable?'2024·2025 연결/별도 기준 불일치 또는 누락':'연도별 매출·매출채권 항목 일부 누락'),date+' / '+evidence]};}
+const finance=nightFinancePair_(corp.code,2024,2025);const y24=finance.prior,y25=finance.current;const basis=y25.basis&&y24.basis&&y25.basis===y24.basis?y25.basis:(y25.basis||y24.basis||'');const comparable=!!y25.basis&&y25.basis===y24.basis;const fmt=(f,y)=>y+' 매출 '+nightWon_(f.revenue)+', 매출채권 '+nightWon_(f.receivable);const changes=fmt(y24,2024)+' / '+fmt(y25,2025);const enough=comparable&&y25.revenue!==null&&y24.revenue!==null&&y25.receivable!==null&&y24.receivable!==null;const status=enough?'완료':'부분완료';const signal=!comparable?'연도별 재무제표 기준 불일치 또는 누락':!enough?'재무항목 누락: 추가 확인 필요':y25.receivable>y24.receivable?'매출채권 증가 (연체 여부 미확인)':'재무검토 필요';const note='연체·손실충당금 주석 미검증: 숫자 추정 금지';const evidence='DART '+corp.code+' / '+basis+' / 2024·2025 사업보고서 재무제표 / 금액 원';return {corpCode:corp.code,status,signal,level:status,evidence,result:[name,reg,phone,address,corp.code,'DART 기업명 및 사업자번호 일치 / 국세청 영업상태 미검증',basis,changes,note,status,signal,status==='완료'?'':(!comparable?'2024·2025 연결/별도 기준 불일치 또는 누락':'연도별 매출·매출채권 항목 일부 누락'),date+' / '+evidence]};}
 function nightWon_(n){return n===null?'확인 불가':Math.round(n).toLocaleString('ko-KR')+'원';}
 function nightGet_(url){const response=UrlFetchApp.fetch(url,{muteHttpExceptions:true,followRedirects:true});const code=response.getResponseCode();if(code===429||code>=500)throw Error('API 일시 오류 HTTP '+code);if(code!==200)throw Error('API HTTP '+code);return response;}
 /** DART 고유번호 전체 목록을 읽어 기업명 '정확히 일치'만 선택; 유사명 자동매칭 금지. */
@@ -300,7 +300,46 @@ function nightVerifyCorp_(corpCode,bizNo){
   if(!dartNo)return {ok:false,reason:'DART 기업개황에 사업자번호 없음'};
   return dartNo===bizNo?{ok:true,reason:'사업자번호 일치'}:{ok:false,reason:'입력 사업자번호와 DART 사업자번호 불일치'};
 }
-function nightFinance_(corp,year){const key=encodeURIComponent(nightKey_());for(const basis of ['CFS','OFS']){const url='https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json?crtfc_key='+key+'&corp_code='+encodeURIComponent(corp)+'&bsns_year='+year+'&reprt_code=11011&fs_div='+basis;const data=JSON.parse(nightGet_(url).getContentText('UTF-8'));if(data.status==='013')continue;if(data.status!=='000')throw Error('DART 재무 '+year+' '+basis+': '+(data.message||data.status));const list=data.list||[];let revenue=null,receivable=null;for(const x of list){const nm=String(x.account_nm||'').replace(/\s/g,'');const amt=nightAmount_(x.thstrm_amount);if(amt===null)continue;if(revenue===null&&/^(매출액|수익\(매출액\)|영업수익)$/.test(nm))revenue=amt;if(receivable===null&&/^(매출채권|매출채권및기타채권)$/.test(nm))receivable=amt;}if(revenue!==null||receivable!==null)return {basis,revenue,receivable};}return {basis:'',revenue:null,receivable:null};}
+function nightFinanceCandidates_(corp,year){
+ const key=encodeURIComponent(nightKey_()),out=[];
+ for(const basis of ['CFS','OFS']){
+  const url='https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json?crtfc_key='+key+'&corp_code='+encodeURIComponent(corp)+'&bsns_year='+year+'&reprt_code=11011&fs_div='+basis;
+  const data=JSON.parse(nightGet_(url).getContentText('UTF-8'));
+  if(data.status==='013')continue;
+  if(data.status!=='000')throw Error('DART 재무 '+year+' '+basis+': '+(data.message||data.status));
+  let revenue=null,receivable=null,receivableKind='';
+  for(const x of data.list||[]){
+   const nm=String(x.account_nm||'').replace(/\\s/g,'').replace(/[·ㆍ]/g,'').replace(/（/g,'(').replace(/）/g,')');
+   const id=String(x.account_id||'');
+   const amt=nightAmount_(x.thstrm_amount);
+   if(amt===null)continue;
+   const isRevenue=/^(매출액|수익\\(매출액\\)|영업수익|매출|수익)$/.test(nm)||/^(ifrs-full_|ifrs_)Revenue$/.test(id);
+   const isTrade=/^(매출채권|매출채권순액|매출채권및기타채권)$/.test(nm)||/^(ifrs-full_|ifrs_)TradeAndOtherCurrentReceivables$/.test(id);
+   if(revenue===null&&isRevenue)revenue=amt;
+   if(isTrade){
+    const kind=/기타채권/.test(nm)||/TradeAndOther/.test(id)?'combined':'trade';
+    if(receivable===null||(receivableKind==='combined'&&kind==='trade')){receivable=amt;receivableKind=kind;}
+   }
+  }
+  out.push({basis,revenue,receivable,receivableKind});
+ }
+ return out;
+}
+function nightFinancePair_(corp,priorYear,currentYear){
+ const prior=nightFinanceCandidates_(corp,priorYear),current=nightFinanceCandidates_(corp,currentYear);
+ // 비교가능한 동일 재무제표 기준을 우선하고, 양 연도 항목이 모두 있는 조합을 선택한다.
+ const pairs=[];
+ for(const a of prior)for(const b of current)if(a.basis===b.basis){
+  const complete=[a.revenue,a.receivable,b.revenue,b.receivable].filter(v=>v!==null).length;
+  const exact=(a.receivableKind==='trade'?1:0)+(b.receivableKind==='trade'?1:0);
+  pairs.push({a,b,score:complete*10+exact+(a.basis==='CFS'?0.1:0)});
+ }
+ pairs.sort((x,y)=>y.score-x.score);
+ if(pairs.length)return {prior:pairs[0].a,current:pairs[0].b};
+ const best=arr=>arr.slice().sort((a,b)=>((b.revenue!==null)+(b.receivable!==null))-((a.revenue!==null)+(a.receivable!==null)))[0]||{basis:'',revenue:null,receivable:null};
+ return {prior:best(prior),current:best(current)};
+}
+function nightFinance_(corp,year){return nightFinancePair_(corp,year,year).current;}
 function nightAmount_(v){if(v===null||v===undefined||String(v).trim()==='-'||String(v).trim()==='')return null;const n=Number(String(v).replace(/,/g,''));return Number.isFinite(n)?n:null;}
 /** 설치 후 확인용. 인증정보 자체는 표시하지 않습니다. */
 function nightStatus(){return {dartKeyRegistered:!!nightKey_(),active:PropertiesService.getScriptProperties().getProperty('NIGHT_ACTIVE')==='1',run:PropertiesService.getScriptProperties().getProperty('NIGHT_RUN')||'',tickTriggers:ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===NIGHT.tickFn).length};}
