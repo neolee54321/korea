@@ -494,3 +494,36 @@ function nightFinancePilot5(){
  console.log(JSON.stringify(results));
  return results;
 }
+
+
+/** 기존 100건의 부분완료만 별도 탭에서 재검증. 재실행 시 진행상황을 이어받습니다. */
+function nightFinanceRecheck64(){
+ const run='20261025-112317',output='재무재검증_'+run,ss=nightBook_();
+ const q=ss.getSheetByName(NIGHT.queue);
+ if(!q)throw Error('원본 작업대기열 없음');
+ const headers=['실행ID','기업명','사업자등록번호','DART고유번호','기존상태','재검증상태','재무기준','2024매출(원)','2024매출채권(원)','2025매출(원)','2025매출채권(원)','채권계정구분','판정메모','검증시각'];
+ let out=ss.getSheetByName(output);
+ if(!out){out=ss.insertSheet(output);out.getRange(1,1,1,headers.length).setValues([headers]);out.setFrozenRows(1);}
+ const all=q.getLastRow()>1?q.getRange(2,1,q.getLastRow()-1,16).getValues():[];
+ const targets=all.filter(r=>String(r[0])===run&&String(r[8])==='부분완료');
+ if(targets.length!==64)throw Error('원본 부분완료 건수 예상과 불일치: '+targets.length+'건. 변경하지 않음');
+ const existing=out.getLastRow()>1?out.getRange(2,1,out.getLastRow()-1,14).getValues():[];
+ const done=new Set(existing.map(r=>String(r[2]).replace(/\\D/g,'')));
+ const todo=targets.filter(r=>!done.has(String(r[3]).replace(/\\D/g,''))).slice(0,5);
+ const now=new Date(),rows=[];
+ for(const r of todo){
+  const corp=String(r[12]||'').replace(/\\D/g,'').padStart(8,'0'),biz=String(r[3]).replace(/\\D/g,'');
+  if(!r[12]){rows.push([run,r[2],biz,'','부분완료','공시자료 확인 필요','','','','','','','DART 고유번호 없음',now]);continue;}
+  try{
+   const pair=nightFinancePair_(corp,2024,2025),a=pair.prior,b=pair.current;
+   const ok=!!a.basis&&a.basis===b.basis&&[a.revenue,a.receivable,b.revenue,b.receivable].every(v=>v!==null);
+   const kind=(a.receivableKind==='combined'||b.receivableKind==='combined')?'매출채권·기타채권 합산 포함':'매출채권';
+   const note=!ok?'동일 기준 재무항목 일부 미확인':kind==='매출채권'?'동일 기준 항목 추출 성공':'합산 채권 항목 포함: 순수 매출채권 증가로 단정 금지';
+   rows.push([run,r[2],biz,corp,'부분완료',ok?'완료 가능':'부분완료 유지',a.basis===b.basis?a.basis:'기준 불일치',a.revenue,a.receivable,b.revenue,b.receivable,kind,note,now]);
+  }catch(e){rows.push([run,r[2],biz,corp,'부분완료','조회 오류','','','','','','',String(e.message||e).slice(0,180),now]);}
+ }
+ if(rows.length)out.getRange(out.getLastRow()+1,1,rows.length,14).setValues(rows);
+ const allDone=existing.length+rows.length;
+ const summary={run,total:targets.length,processed:allDone,remaining:targets.length-allDone,nextAction:allDone<targets.length?'nightFinanceRecheck64 다시 실행':'재검증 완료',resultSheet:output};
+ console.log(JSON.stringify(summary));return summary;
+}
