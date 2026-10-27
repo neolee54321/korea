@@ -81,17 +81,23 @@ function bulkPriorityExplain100(){
  if(ss.getSheetByName(title))throw Error('기존 근거표 보존: '+title);
  const detail=rows.filter(r=>r[1]).map(r=>{
   const [rank,name,biz,total,available,group,basis,prev,current,change,notes,original]=r;
+  const f=financeByBiz.get(String(biz).replace(/\\D/g,''));
   const nts=String(notes).includes('계속사업 확인')?5:0;
   const dart=String(notes).includes('DART 재무조회 근거')?5:0;
   const a=typeof prev==='number'?prev:Number(prev),b=typeof current==='number'?current:Number(current);
   const financial=Number(available)===55&&Number.isFinite(a)&&Number.isFinite(b)&&a>=0&&b>=0;
-  let scale='',growth='',ratio='',delta=null;
+  let scale='',growth='',ratio='',delta=null,ratioPercent='';
   if(financial){
    scale=b>=1e10?10:b>=1e9?7:b>0?4:0;
    delta=a>0?(b-a)/a:null;
    growth=delta!==null&&delta>=.2?15:delta!==null&&delta>0?9:delta!==null&&delta===0?4:0;
    ratio=Number(total)-nts-dart-scale-growth;
    if(![0,4,8,14,20].includes(ratio))throw Error('비중 점수 불일치: '+name+' '+ratio);
+   const revenue=f?Number(f[9]):NaN;
+   if(!Number.isFinite(revenue)||revenue<=0)throw Error('매출액 근거 누락: '+name);
+   ratioPercent=(b/revenue*100).toFixed(1)+'%';
+   const expected=b/revenue>=.3?20:b/revenue>=.15?14:b/revenue>=.05?8:b/revenue>0?4:0;
+   if(expected!==ratio)throw Error('매출대비 비중 점수 재검산 불일치: '+name);
   }
   const sum=nts+dart+(financial?scale+growth+ratio:0);
   if(sum!==Number(total))throw Error('합계 검증 실패: '+name+' '+sum+'/'+total);
@@ -100,7 +106,7 @@ function bulkPriorityExplain100(){
    'DART '+dart+'/5: '+(dart?'조회 근거 있음':'조회 근거 부족'),
    financial?'잔액규모 '+scale+'/10: 2025 잔액 '+Math.round(b/1e8*10)/10+'억원':'잔액규모 미평가',
    financial?'증감 '+growth+'/15: '+(delta===null?'전년 0':(delta*100).toFixed(1)+'%'):'증감 미평가',
-   financial?'매출대비 '+ratio+'/20: 산출 점수(매출액 원본은 재검증 시트 확인)':'매출대비 미평가',
+   financial?'매출대비 '+ratio+'/20: '+ratioPercent:'매출대비 미평가',
    '추가 45점 미평가: 건전성20·반복거래15·접근성10'
   ].join(' | ');
   return [rank,name,String(biz),total,available,group,nts,dart,scale,growth,ratio,0,why,basis,original,
